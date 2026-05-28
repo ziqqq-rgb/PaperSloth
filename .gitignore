@@ -1,0 +1,25 @@
+# environment
+.env
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# data — do not commit PDFs
+data/
+
+# virtual env
+venv/
+.venv/
+env/
+
+# misc
+.DS_Store
+*.log
