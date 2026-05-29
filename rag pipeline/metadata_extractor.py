@@ -20,7 +20,6 @@ def get_metadata_from_pdf(pdf_path: str) -> dict:
         print(f"Error reading PDF {pdf_path}: {e}")
         return None
 
-    # Connect to your local Ollama model (e.g., llama3.2 or qwen)
     llm = ChatOllama(model="gemma3:1b", temperature=0)
     
     # Force the LLM to reply strictly in our Pydantic JSON format
@@ -37,8 +36,3 @@ def get_metadata_from_pdf(pdf_path: str) -> dict:
     
     return result.model_dump() # Returns a clean Python dictionary
 
-# --- Quick Test (You can run this file directly to test it) ---
-if __name__ == "__main__":
-    test_pdf = "rag pipeline/test1.pdf"
-    metadata = get_metadata_from_pdf(test_pdf)
-    print("Extracted Metadata:", metadata)
