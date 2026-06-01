@@ -1,223 +1,76 @@
-The user wants me to extract all the exam questions from the provided images.
-I need to skip the cover page, instructions, and appendix tables.
-The output must be a JSON array of objects.
+The objective is to extract all exam questions from the provided images (pages 1-10) into a specific JSON format. I need to skip the cover page, instructions, and appendix.
 
-- Question 1a (page 2):
-    - Text: "The output voltage from a precision 12-V power supply is monitored at intervals over a period, which produces the set of data shown in TABLE Q1."
-    - Includes TABLE Q1.
-    - Sub-questions:
-        - i: "Evaluate the average value and standard deviation of the voltage measurement." (marks: 4, type: calculation)
-        - ii: "Analyse whether only random errors are present during the measurement. Explain your decision." (marks: 3, type: theory)
-        - iii: "Justify the important of error analysis for the above production." (marks: 3, type: theory)
-    - Since 1a is the main part and i, ii, iii are sub-parts of it, I should treat them as separate items in the JSON.
-    - Wait, the prompt says "Split sub-questions (a, b, c, i, ii, iii) into separate items".
-    - So for 1.a.i, the question number is "1", sub_question is "a.i".
-    - Let's check the text again. 1. a. is the introductory text with the table. The actual questions are i, ii, iii.
-    - I will include the introductory text and table in the `question_text` for each of these sub-questions for context.
+    *   Page 1: Cover page and instructions. (Skip)
+    *   Page 2: Question 1a. Includes TABLE Q1. Sub-questions i, ii, iii.
+    *   Page 3: Question 1b. Includes FIGURE Q1b. Sub-questions i, ii.
+    *   Page 4: Question 2a. Includes FIGURE Q2a. Question 2b.
+    *   Page 5: Question 2c. Sub-questions i, ii. (Note: This is a continuation of Q2).
+    *   Page 6: Question 3. Sub-questions a, b (i, ii, iii), c (i, ii). Includes FIGURE Q3.
+    *   Page 7: Question 4. Includes FIGURE Q4.
+    *   Page 8: Appendix I (Type J). (Skip)
+    *   Page 9: Appendix I (Type K). (Skip)
+    *   Page 10: Appendix I (Type T). (Skip)
 
-- Question 1b (page 3):
-    - Text: "A multirange voltmeter is constructed using a permanent magnet moving coil (PMMC) instrument with series shunt resistances connected in series as shown in FIGURE Q1b. A basic d'Arsonval movement meter with internal resistance, Rm = R5 = 100 Ω, and a full-scale current, Ifsd = 1 mA, is to be used for 0-2.5 V, 0-10 V, 0-50 V, 0-250 V and 0-1000 V multirange voltmeter."
-    - Includes FIGURE Q1b.
-    - Sub-questions:
-        - i: "Determine the set of series resistances, R1, R2, R3 and R4, required for this design." (marks: 10, type: calculation)
-        - ii: "If the meter is to be further scaled to cater for 5000 V range, determine the additional shunt resistance, Rs, required if the selector is positioned on the 1000 V range selector switch. Explain the effect of the other range selection points." (marks: 5, type: calculation)
+    *   **Q1a (Page 2):**
+        *   Text: "The output voltage from a precision 12-V power supply is monitored at intervals over a period, which produces the set of data shown in TABLE Q1."
+        *   Table Q1:
+            | Measurement | Unit (V) |
+            |---|---|
+            | V1 | 12.001 |
+            | V2 | 11.999 |
+            | V3 | 11.998 |
+            | V4 | 12.003 |
+            | V5 | 12.002 |
+            | V6 | 11.997 |
+            | V7 | 12.002 |
+            | V8 | 12.003 |
+            | V9 | 11.998 |
+            | V10 | 11.997 |
+        *   Sub-i: "Evaluate the average value and standard deviation of the voltage measurement." (4 marks, calculation)
+        *   Sub-ii: "Analyse whether only random errors are present during the measurement. Explain your decision." (3 marks, theory/calculation)
+        *   Sub-iii: "Justify the important of error analysis for the above production." (3 marks, theory)
 
-- Question 2a (page 4):
-    - Text: "FIGURE Q2a shows a pressured vessel level measurement. Solve the Lower Range Value (LRV) and Upper Range Value (URV). Notes: h1 = 10 ft, h2 = 12 ft, d = 5 ft, γ1 = 64 lb/ft³, γ2 = 58.3 lb/ft³"
-    - Includes FIGURE Q2a.
-    - Marks: 10.
-    - Type: calculation.
+    *   **Q1b (Page 3):**
+        *   Text: "A multirange voltmeter is constructed using a permanent magnet moving coil (PMMC) instrument with series shunt resistances connected in series as shown in FIGURE Q1b. A basic d'Arsonval movement meter with internal resistance, $R_m = R_5 = 100 \Omega$, and a full-scale current, $I_{fsd} = 1\text{ mA}$, is to be used for 0-2.5 V, 0-10 V, 0-50 V, 0-250 V and 0-1000 V multirange voltmeter."
+        *   Sub-i: "Determine the set of series resistances, $R_1, R_2, R_3$ and $R_4$, required for this design." (10 marks, calculation)
+        *   Sub-ii: "If the meter is to be further scaled to cater for 5000 V range, determine the additional shunt resistance, $R_s$, required if the selector is positioned on the 1000 V range selector switch. Explain the effect of the other range selection points." (5 marks, calculation)
 
-- Question 2b (page 4):
-    - Text: "Justify with an example on the requirement of wet leg for a level measurement shown above."
-    - References FIGURE Q2a.
-    - Marks: 5.
-    - Type: theory.
+    *   **Q2a (Page 4):**
+        *   Text: "FIGURE Q2a shows a pressured vessel level measurement. Solve the Lower Range Value (LRV) and Upper Range Value (URV). Notes: $h_1 = 10\text{ ft}, h_2 = 12\text{ ft}, d = 5\text{ ft}, \gamma_1 = 64\text{ lb/ft}^3, \gamma_2 = 58.3\text{ lb/ft}^3$"
+        *   Marks: 10 marks. (calculation)
 
-- Question 2c (page 5):
-    - Text: "Thermocouple is one of the most used techniques to measure temperature in the oil and gas industries."
-    - Sub-questions:
-        - i: "Based on the thermocouple Tables for type J given in APPENDIX I, solve the voltage in millivolts that will be measured by a data acquisition system when the thermocouple measures 183°C. The reference is set at the ambient temperature of 25°C." (marks: 5, type: calculation)
-        - ii: "Solve the voltage in millivolts that will be measured by a data acquisition system when the thermocouple is changed from type K to type T." (marks: 5, type: calculation)
+    *   **Q2b (Page 4):**
+        *   Text: "Justify with an example on the requirement of wet leg for a level measurement shown above."
+        *   Marks: 5 marks. (theory)
 
-- Question 3a (page 6):
-    - Text: "FIGURE Q3 shows an instrument loop diagram for a flow control loop. Discuss the TWO (2) flow primary elements for measurement that can be used in the instrument loop diagram."
-    - Includes FIGURE Q3.
-    - Marks: 10.
-    - Type: theory.
+    *   **Q2c (Page 5):**
+        *   Intro: "Thermocouple is one of the most used techniques to measure temperature in the oil and gas industries."
+        *   Sub-i: "Based on the thermocouple Tables for type J given in APPENDIX I, solve the voltage in millivolts that will be measured by a data acquisition system when the thermocouple measures $183^\circ\text{C}$. The reference is set at the ambient temperature of $25^\circ\text{C}$." (5 marks, calculation)
+        *   Sub-ii: "Solve the voltage in millivolts that will be measured by a data acquisition system when the thermocouple is changed from type K to type T." (5 marks, calculation)
 
-- Question 3b (page 6):
-    - Text: "Explain the following terminologies:"
-    - Sub-questions:
-        - i: "Measuring absolute pressure (psia)." (marks: 10 for all b parts)
-        - ii: "Measuring gauge pressure (psig)."
-        - iii: "Measuring differential pressure (psi)"
-    - Total marks for 3b is 10. I will assign it to the group or split if possible. Usually, marks are for the whole section. I'll use 10 for the first and null for others or similar. No, I'll put 10 for the overall sub-question b if it were one, but since I must split them, I'll put 10 for the first one or split it. Let's put null for the individual parts and mention they are part of a 10-mark question. Actually, let's just put 10 for the overall block if not specified. Let's see. Usually, they are equal. Let's say 3.33 each? No, better leave as null if not specified per item.
+    *   **Q3 (Page 6):**
+        *   Intro: "FIGURE Q3 shows an instrument loop diagram for a flow control loop."
+        *   Sub-a: "Discuss the TWO (2) flow primary elements for measurement that can be used in the instrument loop diagram." (10 marks, theory)
+        *   Sub-b (i): "Explain the following terminologies: Measuring absolute pressure (psia)." (marks part of 10)
+        *   Sub-b (ii): "Explain the following terminologies: Measuring gauge pressure (psig)." (marks part of 10)
+        *   Sub-b (iii): "Explain the following terminologies: Measuring differential pressure (psi)" (marks part of 10)
+        *   Sub-c (i): "Assess the following rejuvenation: Requirement to convert a wired system to a 5G system." (marks part of 10)
+        *   Sub-c (ii): "Assess the following rejuvenation: The benefit of using 5G transmission." (marks part of 10)
 
-- Question 3c (page 6):
-    - Text: "Assess the following rejuvenation:"
-    - Sub-questions:
-        - i: "Requirement to convert a wired system to a 5G system." (marks: 10 for whole 3c)
-        - ii: "The benefit of using 5G transmission."
-    - Total marks for 3c is 10.
+    *   **Q4 (Page 7):**
+        *   Text: "You would like to implement a PI controller in a single feedback loop control. Given a general model of a closed-loop system as shown in FIGURE Q4, analyse whether a PI controller can achieve zero offset due to a unit step change at the Setpoint, $\Delta SP(s)$, as $t \to \infty$. The generic transfer function is $G_d(s) = \frac{K_d}{\tau_d s + 1}, G_p(s) = \frac{K_p}{\tau_p s + 1}$"
+        *   Marks: 20 marks. (calculation)
 
-- Question 4 (page 7):
-    - Text: "You would like to implement a PI controller in a single feedback loop control. Given a general model of a closed-loop system as shown in FIGURE Q4, analyse whether a PI controller can achieve zero offset due to a unit step change at the Setpoint, ΔSP(s), as t → ∞. The generic transfer function is G_d(s) = K_d / (τ_d s + 1), G_p(s) = K_p / (τ_p s + 1)"
-    - Includes FIGURE Q4.
-    - Marks: 20.
-    - Type: calculation.
-
-Refining Question 1a:
-TABLE Q1:
-| Measurement | Unit (V) |
-|---|---|
-| V1 | 12.001 |
-| V2 | 11.999 |
-| V3 | 11.998 |
-| V4 | 12.003 |
-| V5 | 12.002 |
-| V6 | 11.997 |
-| V7 | 12.002 |
-| V8 | 12.003 |
-| V9 | 11.998 |
-| V10 | 11.997 |
-
-Refining Question 1b:
-Intro text mentions Rm = R5 = 100 Ω, Ifsd = 1 mA.
-Ranges: 0-2.5 V, 0-10 V, 0-50 V, 0-250 V and 0-1000 V.
-
-Let's start constructing JSON.
-
-Question 1.a.i:
-- text: "The output voltage from a precision 12-V power supply is monitored at intervals over a period, which produces the set of data shown in TABLE Q1.\n\n| Measurement | Unit (V) |\n|---|---|\n| V1 | 12.001 |\n| V2 | 11.999 |\n| V3 | 11.998 |\n| V4 | 12.003 |\n| V5 | 12.002 |\n| V6 | 11.997 |\n| V7 | 12.002 |\n| V8 | 12.003 |\n| V9 | 11.998 |\n| V10 | 11.997 |\n\ni. Evaluate the average value and standard deviation of the voltage measurement."
-- marks: 4
-- has_figure: true
-- figure_label: "TABLE Q1"
-- type: calculation
-
-Question 1.a.ii:
-- text: "The output voltage from a precision 12-V power supply is monitored at intervals over a period, which produces the set of data shown in TABLE Q1.\n\n| Measurement | Unit (V) |\n|---|---|\n| V1 | 12.001 |\n| V2 | 11.999 |\n| V3 | 11.998 |\n| V4 | 12.003 |\n| V5 | 12.002 |\n| V6 | 11.997 |\n| V7 | 12.002 |\n| V8 | 12.003 |\n| V9 | 11.998 |\n| V10 | 11.997 |\n\nii. Analyse whether only random errors are present during the measurement. Explain your decision."
-- marks: 3
-- has_figure: true
-- figure_label: "TABLE Q1"
-- type: theory
-
-Question 1.a.iii:
-- text: "The output voltage from a precision 12-V power supply is monitored at intervals over a period, which produces the set of data shown in TABLE Q1.\n\n| Measurement | Unit (V) |\n|---|---|\n| V1 | 12.001 |\n| V2 | 11.999 |\n| V3 | 11.998 |\n| V4 | 12.003 |\n| V5 | 12.002 |\n| V6 | 11.997 |\n| V7 | 12.002 |\n| V8 | 12.003 |\n| V9 | 11.998 |\n| V10 | 11.997 |\n\niii. Justify the important of error analysis for the above production."
-- marks: 3
-- has_figure: true
-- figure_label: "TABLE Q1"
-- type: theory
-
-Question 1.b.i:
-- text: "A multirange voltmeter is constructed using a permanent magnet moving coil (PMMC) instrument with series shunt resistances connected in series as shown in FIGURE Q1b. A basic d'Arsonval movement meter with internal resistance, Rm = R5 = 100 Ω, and a full-scale current, Ifsd = 1 mA, is to be used for 0-2.5 V, 0-10 V, 0-50 V, 0-250 V and 0-1000 V multirange voltmeter.\n\ni. Determine the set of series resistances, R1, R2, R3 and R4, required for this design."
-- marks: 10
-- has_figure: true
-- figure_label: "FIGURE Q1b"
-- type: calculation
-
-Question 1.b.ii:
-- text: "A multirange voltmeter is constructed using a permanent magnet moving coil (PMMC) instrument with series shunt resistances connected in series as shown in FIGURE Q1b. A basic d'Arsonval movement meter with internal resistance, Rm = R5 = 100 Ω, and a full-scale current, Ifsd = 1 mA, is to be used for 0-2.5 V, 0-10 V, 0-50 V, 0-250 V and 0-1000 V multirange voltmeter.\n\nii. If the meter is to be further scaled to cater for 5000 V range, determine the additional shunt resistance, Rs, required if the selector is positioned on the 1000 V range selector switch. Explain the effect of the other range selection points."
-- marks: 5
-- has_figure: true
-- figure_label: "FIGURE Q1b"
-- type: calculation
-
-Question 2.a:
-- text: "FIGURE Q2a shows a pressured vessel level measurement. Solve the Lower Range Value (LRV) and Upper Range Value (URV).\n\nNotes: h1 = 10 ft, h2 = 12 ft, d = 5 ft, γ1 = 64 lb/ft³, γ2 = 58.3 lb/ft³"
-- marks: 10
-- has_figure: true
-- figure_label: "FIGURE Q2a"
-- type: calculation
-
-Question 2.b:
-- text: "Justify with an example on the requirement of wet leg for a level measurement shown above."
-- marks: 5
-- has_figure: true
-- figure_label: "FIGURE Q2a"
-- type: theory
-
-Question 2.c.i:
-- text: "Thermocouple is one of the most used techniques to measure temperature in the oil and gas industries.\n\ni. Based on the thermocouple Tables for type J given in APPENDIX I, solve the voltage in millivolts that will be measured by a data acquisition system when the thermocouple measures 183°C. The reference is set at the ambient temperature of 25°C."
-- marks: 5
-- has_figure: false
-- figure_label: null
-- type: calculation
-
-Question 2.c.ii:
-- text: "Thermocouple is one of the most used techniques to measure temperature in the oil and gas industries.\n\nii. Solve the voltage in millivolts that will be measured by a data acquisition system when the thermocouple is changed from type K to type T."
-- marks: 5
-- has_figure: false
-- figure_label: null
-- type: calculation
-
-Question 3.a:
-- text: "FIGURE Q3 shows an instrument loop diagram for a flow control loop. Discuss the TWO (2) flow primary elements for measurement that can be used in the instrument loop diagram."
-- marks: 10
-- has_figure: true
-- figure_label: "FIGURE Q3"
-- type: theory
-
-Question 3.b.i:
-- text: "Explain the following terminologies:\ni. Measuring absolute pressure (psia)."
-- marks: null
-- has_figure: false
-- figure_label: null
-- type: theory
-
-Question 3.b.ii:
-- text: "Explain the following terminologies:\nii. Measuring gauge pressure (psig)."
-- marks: null
-- has_figure: false
-- figure_label: null
-- type: theory
-
-Question 3.b.iii:
-- text: "Explain the following terminologies:\niii. Measuring differential pressure (psi)"
-- marks: null
-- has_figure: false
-- figure_label: null
-- type: theory
-(Note: total marks for 3b is 10)
-
-Question 3.c.i:
-- text: "Assess the following rejuvenation:\ni. Requirement to convert a wired system to a 5G system."
-- marks: null
-- has_figure: false
-- figure_label: null
-- type: theory
-
-Question 3.c.ii:
-- text: "Assess the following rejuvenation:\nii. The benefit of using 5G transmission."
-- marks: null
-- has_figure: false
-- figure_label: null
-- type: theory
-(Note: total marks for 3c is 10)
-
-Question 4:
-- text: "You would like to implement a PI controller in a single feedback loop control. Given a general model of a closed-loop system as shown in FIGURE Q4, analyse whether a PI controller can achieve zero offset due to a unit step change at the Setpoint, ΔSP(s), as t → ∞. The generic transfer function is\n\nG_d(s) = K_d / (τ_d s + 1), G_p(s) = K_p / (τ_p s + 1)"
-- marks: 20
-- has_figure: true
-- figure_label: "FIGURE Q4"
-- type: calculation
-
-Final check on constraints:
-- Valid parseable JSON.
-- Double-quoted strings.
-- Single JSON array.
-- No comments.
-- No extra text.
-- Split sub-questions.
-- Full text.
-- Tables as markdown.
-- question_type assigned.
-- has_figure and figure_label handled.
+    *   Verify page numbers.
+    *   Convert tables to markdown.
+    *   Ensure all marks are extracted.
+    *   Correct `question_type` and `has_figure`.
 [
   {
     "question_number": "1",
     "sub_question": "a.i",
-    "question_text": "The output voltage from a precision 12-V power supply is monitored at intervals over a period, which produces the set of data shown in TABLE Q1.\n\n| Measurement | Unit (V) |\n|---|---|\n| V1 | 12.001 |\n| V2 | 11.999 |\n| V3 | 11.998 |\n| V4 | 12.003 |\n| V5 | 12.002 |\n| V6 | 11.997 |\n| V7 | 12.002 |\n| V8 | 12.003 |\n| V9 | 11.998 |\n| V10 | 11.997 |\n\ni. Evaluate the average value and standard deviation of the voltage measurement.",
+    "page_number": 2,
+    "question_text": "The output voltage from a precision 12-V power supply is monitored at intervals over a period, which produces the set of data shown in TABLE Q1.\n\n| Measurement | Unit (V) |\n|---|---|\n| V1 | 12.001 |\n| V2 | 11.999 |\n| V3 | 11.998 |\n| V4 | 12.003 |\n| V5 | 12.002 |\n| V6 | 11.997 |\n| V7 | 12.002 |\n| V8 | 12.003 |\n| V9 | 11.998 |\n| V10 | 11.997 |\n\nEvaluate the average value and standard deviation of the voltage measurement.",
     "marks": 4,
     "has_figure": true,
     "figure_label": "TABLE Q1",
@@ -226,7 +79,8 @@ Final check on constraints:
   {
     "question_number": "1",
     "sub_question": "a.ii",
-    "question_text": "The output voltage from a precision 12-V power supply is monitored at intervals over a period, which produces the set of data shown in TABLE Q1.\n\n| Measurement | Unit (V) |\n|---|---|\n| V1 | 12.001 |\n| V2 | 11.999 |\n| V3 | 11.998 |\n| V4 | 12.003 |\n| V5 | 12.002 |\n| V6 | 11.997 |\n| V7 | 12.002 |\n| V8 | 12.003 |\n| V9 | 11.998 |\n| V10 | 11.997 |\n\nii. Analyse whether only random errors are present during the measurement. Explain your decision.",
+    "page_number": 2,
+    "question_text": "The output voltage from a precision 12-V power supply is monitored at intervals over a period, which produces the set of data shown in TABLE Q1.\n\n| Measurement | Unit (V) |\n|---|---|\n| V1 | 12.001 |\n| V2 | 11.999 |\n| V3 | 11.998 |\n| V4 | 12.003 |\n| V5 | 12.002 |\n| V6 | 11.997 |\n| V7 | 12.002 |\n| V8 | 12.003 |\n| V9 | 11.998 |\n| V10 | 11.997 |\n\nAnalyse whether only random errors are present during the measurement. Explain your decision.",
     "marks": 3,
     "has_figure": true,
     "figure_label": "TABLE Q1",
@@ -235,7 +89,8 @@ Final check on constraints:
   {
     "question_number": "1",
     "sub_question": "a.iii",
-    "question_text": "The output voltage from a precision 12-V power supply is monitored at intervals over a period, which produces the set of data shown in TABLE Q1.\n\n| Measurement | Unit (V) |\n|---|---|\n| V1 | 12.001 |\n| V2 | 11.999 |\n| V3 | 11.998 |\n| V4 | 12.003 |\n| V5 | 12.002 |\n| V6 | 11.997 |\n| V7 | 12.002 |\n| V8 | 12.003 |\n| V9 | 11.998 |\n| V10 | 11.997 |\n\niii. Justify the important of error analysis for the above production.",
+    "page_number": 2,
+    "question_text": "The output voltage from a precision 12-V power supply is monitored at intervals over a period, which produces the set of data shown in TABLE Q1.\n\n| Measurement | Unit (V) |\n|---|---|\n| V1 | 12.001 |\n| V2 | 11.999 |\n| V3 | 11.998 |\n| V4 | 12.003 |\n| V5 | 12.002 |\n| V6 | 11.997 |\n| V7 | 12.002 |\n| V8 | 12.003 |\n| V9 | 11.998 |\n| V10 | 11.997 |\n\nJustify the important of error analysis for the above production.",
     "marks": 3,
     "has_figure": true,
     "figure_label": "TABLE Q1",
@@ -244,7 +99,8 @@ Final check on constraints:
   {
     "question_number": "1",
     "sub_question": "b.i",
-    "question_text": "A multirange voltmeter is constructed using a permanent magnet moving coil (PMMC) instrument with series shunt resistances connected in series as shown in FIGURE Q1b. A basic d'Arsonval movement meter with internal resistance, Rm = R5 = 100 Ω, and a full-scale current, Ifsd = 1 mA, is to be used for 0-2.5 V, 0-10 V, 0-50 V, 0-250 V and 0-1000 V multirange voltmeter.\n\ni. Determine the set of series resistances, R1, R2, R3 and R4, required for this design.",
+    "page_number": 3,
+    "question_text": "A multirange voltmeter is constructed using a permanent magnet moving coil (PMMC) instrument with series shunt resistances connected in series as shown in FIGURE Q1b. A basic d'Arsonval movement meter with internal resistance, Rm = R5 = 100 Ω, and a full-scale current, Ifsd = 1 mA, is to be used for 0-2.5 V, 0-10 V, 0-50 V, 0-250 V and 0-1000 V multirange voltmeter.\n\nDetermine the set of series resistances, R1, R2, R3 and R4, required for this design.",
     "marks": 10,
     "has_figure": true,
     "figure_label": "FIGURE Q1b",
@@ -253,7 +109,8 @@ Final check on constraints:
   {
     "question_number": "1",
     "sub_question": "b.ii",
-    "question_text": "A multirange voltmeter is constructed using a permanent magnet moving coil (PMMC) instrument with series shunt resistances connected in series as shown in FIGURE Q1b. A basic d'Arsonval movement meter with internal resistance, Rm = R5 = 100 Ω, and a full-scale current, Ifsd = 1 mA, is to be used for 0-2.5 V, 0-10 V, 0-50 V, 0-250 V and 0-1000 V multirange voltmeter.\n\nii. If the meter is to be further scaled to cater for 5000 V range, determine the additional shunt resistance, Rs, required if the selector is positioned on the 1000 V range selector switch. Explain the effect of the other range selection points.",
+    "page_number": 3,
+    "question_text": "A multirange voltmeter is constructed using a permanent magnet moving coil (PMMC) instrument with series shunt resistances connected in series as shown in FIGURE Q1b. A basic d'Arsonval movement meter with internal resistance, Rm = R5 = 100 Ω, and a full-scale current, Ifsd = 1 mA, is to be used for 0-2.5 V, 0-10 V, 0-50 V, 0-250 V and 0-1000 V multirange voltmeter.\n\nIf the meter is to be further scaled to cater for 5000 V range, determine the additional shunt resistance, Rs, required if the selector is positioned on the 1000 V range selector switch. Explain the effect of the other range selection points.",
     "marks": 5,
     "has_figure": true,
     "figure_label": "FIGURE Q1b",
@@ -262,7 +119,8 @@ Final check on constraints:
   {
     "question_number": "2",
     "sub_question": "a",
-    "question_text": "FIGURE Q2a shows a pressured vessel level measurement. Solve the Lower Range Value (LRV) and Upper Range Value (URV).\n\nNotes: h1 = 10 ft, h2 = 12 ft, d = 5 ft, γ1 = 64 lb/ft³, γ2 = 58.3 lb/ft³",
+    "page_number": 4,
+    "question_text": "FIGURE Q2a shows a pressured vessel level measurement. Solve the Lower Range Value (LRV) and Upper Range Value (URV).\n\nNotes: h1 = 10 ft, h2= 12 ft, d = 5 ft, γ1 = 64 lb/ft³, γ2 = 58.3 lb/ft³",
     "marks": 10,
     "has_figure": true,
     "figure_label": "FIGURE Q2a",
@@ -271,6 +129,7 @@ Final check on constraints:
   {
     "question_number": "2",
     "sub_question": "b",
+    "page_number": 4,
     "question_text": "Justify with an example on the requirement of wet leg for a level measurement shown above.",
     "marks": 5,
     "has_figure": true,
@@ -280,7 +139,8 @@ Final check on constraints:
   {
     "question_number": "2",
     "sub_question": "c.i",
-    "question_text": "Thermocouple is one of the most used techniques to measure temperature in the oil and gas industries.\n\ni. Based on the thermocouple Tables for type J given in APPENDIX I, solve the voltage in millivolts that will be measured by a data acquisition system when the thermocouple measures 183°C. The reference is set at the ambient temperature of 25°C.",
+    "page_number": 5,
+    "question_text": "Thermocouple is one of the most used techniques to measure temperature in the oil and gas industries.\n\nBased on the thermocouple Tables for type J given in APPENDIX I, solve the voltage in millivolts that will be measured by a data acquisition system when the thermocouple measures 183°C. The reference is set at the ambient temperature of 25°C.",
     "marks": 5,
     "has_figure": false,
     "figure_label": null,
@@ -289,7 +149,8 @@ Final check on constraints:
   {
     "question_number": "2",
     "sub_question": "c.ii",
-    "question_text": "Thermocouple is one of the most used techniques to measure temperature in the oil and gas industries.\n\nii. Solve the voltage in millivolts that will be measured by a data acquisition system when the thermocouple is changed from type K to type T.",
+    "page_number": 5,
+    "question_text": "Thermocouple is one of the most used techniques to measure temperature in the oil and gas industries.\n\nSolve the voltage in millivolts that will be measured by a data acquisition system when the thermocouple is changed from type K to type T.",
     "marks": 5,
     "has_figure": false,
     "figure_label": null,
@@ -298,7 +159,8 @@ Final check on constraints:
   {
     "question_number": "3",
     "sub_question": "a",
-    "question_text": "FIGURE Q3 shows an instrument loop diagram for a flow control loop. Discuss the TWO (2) flow primary elements for measurement that can be used in the instrument loop diagram.",
+    "page_number": 6,
+    "question_text": "FIGURE Q3 shows an instrument loop diagram for a flow control loop.\n\nDiscuss the TWO (2) flow primary elements for measurement that can be used in the instrument loop diagram.",
     "marks": 10,
     "has_figure": true,
     "figure_label": "FIGURE Q3",
@@ -307,7 +169,8 @@ Final check on constraints:
   {
     "question_number": "3",
     "sub_question": "b.i",
-    "question_text": "Explain the following terminologies:\ni. Measuring absolute pressure (psia).",
+    "page_number": 6,
+    "question_text": "Explain the following terminologies:\n\ni. Measuring absolute pressure (psia).",
     "marks": null,
     "has_figure": false,
     "figure_label": null,
@@ -316,7 +179,8 @@ Final check on constraints:
   {
     "question_number": "3",
     "sub_question": "b.ii",
-    "question_text": "Explain the following terminologies:\nii. Measuring gauge pressure (psig).",
+    "page_number": 6,
+    "question_text": "Explain the following terminologies:\n\nii. Measuring gauge pressure (psig).",
     "marks": null,
     "has_figure": false,
     "figure_label": null,
@@ -325,8 +189,9 @@ Final check on constraints:
   {
     "question_number": "3",
     "sub_question": "b.iii",
-    "question_text": "Explain the following terminologies:\niii. Measuring differential pressure (psi)",
-    "marks": null,
+    "page_number": 6,
+    "question_text": "Explain the following terminologies:\n\niii. Measuring differential pressure (psi)",
+    "marks": 10,
     "has_figure": false,
     "figure_label": null,
     "question_type": "theory"
@@ -334,7 +199,8 @@ Final check on constraints:
   {
     "question_number": "3",
     "sub_question": "c.i",
-    "question_text": "Assess the following rejuvenation:\ni. Requirement to convert a wired system to a 5G system.",
+    "page_number": 6,
+    "question_text": "Assess the following rejuvenation:\n\ni. Requirement to convert a wired system to a 5G system.",
     "marks": null,
     "has_figure": false,
     "figure_label": null,
@@ -343,16 +209,18 @@ Final check on constraints:
   {
     "question_number": "3",
     "sub_question": "c.ii",
-    "question_text": "Assess the following rejuvenation:\nii. The benefit of using 5G transmission.",
-    "marks": null,
+    "page_number": 6,
+    "question_text": "Assess the following rejuvenation:\n\nii. The benefit of using 5G transmission.",
+    "marks": 10,
     "has_figure": false,
     "figure_label": null,
     "question_type": "theory"
   },
   {
     "question_number": "4",
-    "sub_question": null,
-    "question_text": "You would like to implement a PI controller in a single feedback loop control. Given a general model of a closed-loop system as shown in FIGURE Q4, analyse whether a PI controller can achieve zero offset due to a unit step change at the Setpoint, ΔSP(s), as t → ∞. The generic transfer function is\n\nGd(s) = Kd / (τd s + 1), Gp(s) = Kp / (τp s + 1)",
+    "sub_question": "a",
+    "page_number": 7,
+    "question_text": "You would like to implement a PI controller in a single feedback loop control. Given a general model of a closed-loop system as shown in FIGURE Q4, analyse whether a PI controller can achieve zero offset due to a unit step change at the Setpoint, ΔSP(s), as t → ∞. The generic transfer function is\n\nG_d(s) = Kd / (τd*s + 1)\nG_p(s) = Kp / (τp*s + 1)",
     "marks": 20,
     "has_figure": true,
     "figure_label": "FIGURE Q4",
