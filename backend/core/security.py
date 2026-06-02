@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import bcrypt
@@ -26,7 +26,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ── JWT ───────────────────────────────────────────────────────────────────────
 
 def create_token(user_id: str, email: str) -> str:
-    expire = datetime.utcnow() + timedelta(hours=settings.jwt_expire_hours)
+    expire = datetime.now(timezone.utc)  + timedelta(hours=settings.jwt_expire_hours)
     return jwt.encode(
         {"sub": user_id, "email": email, "exp": expire},
         settings.jwt_secret,
