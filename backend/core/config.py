@@ -1,16 +1,19 @@
 from pydantic_settings import BaseSettings
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 
 class Settings(BaseSettings):
     # APIs
-    gemini_api_key:  str
-    pinecone_api_key: str
-    supabase_url:    str = ""
-    supabase_key:    str = ""
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    pinecone_api_key = os.getenv("PINECONE_API_KEY")
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
 
     # Database & cache
-    database_url:    str
-    redis_url:       str = "redis://localhost:6379"
+    database_url = os.getenv("DATABASE_URL")
+    redis_url = os.getenv("REDIS_URL")
 
     # Models
     bm25_model_path: str = "../rag pipeline/data/bm25_model.pkl"
@@ -20,7 +23,7 @@ class Settings(BaseSettings):
     pinecone_index:  str = "papersloth"
 
     # Auth
-    jwt_secret:       str = "3a24fe028611789807cfaf5430e5392c6bc3f2d619022149d427743df4625f49"
+    jwt_secret = os.getenv("JWT_SECRET_KEY")
     jwt_expire_hours: int = 24
 
     class Config:

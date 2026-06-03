@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, papers, search
+import uvicorn
 
 app = FastAPI(title="PaperSloth Multi-Modal RAG API", version="1.0.0")
 
@@ -25,7 +26,7 @@ app.include_router(papers.router, prefix="/api/papers", tags=["Paper Management"
 def health_check():
     return {"status": "ok", "message": "Welcome to the PaperSloth API!"}
 
-import uvicorn
+
 
 def main():
     print("🚀 Starting PaperSloth Backend Server...")
