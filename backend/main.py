@@ -30,8 +30,8 @@ def health_check():
 
 def main():
     print("🚀 Starting PaperSloth Backend Server...")
-    # This points to the 'app' object inside 'backend/main.py'
-    uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, reload=True)
+    # Changed from "backend.main:app" to "main:app"
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
 
 if __name__ == "__main__":
     main()
