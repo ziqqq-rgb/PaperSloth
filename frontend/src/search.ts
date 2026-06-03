@@ -1,5 +1,5 @@
 import api from './client'
-import { useAuthStore } from '../store/authStore'
+import { useAuthStore } from './authStore'
 
 export interface SearchFilters {
   course_code?:   string

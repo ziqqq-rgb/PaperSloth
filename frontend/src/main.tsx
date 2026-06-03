@@ -1,12 +1,12 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-// You'll need to create an App.tsx file next if you don't have one!
-// import App from './App.tsx' 
+import App from './App.tsx' 
 import './index.css'
+import App from './app'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {/* <App /> */}
+    <App />
     <div>Hello PaperSloth!</div>
   </React.StrictMode>,
 )
