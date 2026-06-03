@@ -50,7 +50,6 @@ import {
   type SearchFilters,
   type Source,
 } from './search'
-import './index.css'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
