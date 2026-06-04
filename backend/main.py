@@ -1,37 +1,60 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from routers import auth, papers, search
-import uvicorn
+from services.retrieval import RetrievalService
 
-app = FastAPI(title="PaperSloth Multi-Modal RAG API", version="1.0.0")
 
-# --- CORS Configuration ---
-# This is required so your Vite React frontend (running on port 5173) 
-# can securely make API calls to this backend.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Runs at startup: loads BM25, reranker, Pinecone — ONCE.
+    Without this, request.app.state.retrieval throws AttributeError.
+    """
+    app.state.retrieval = RetrievalService()
+    yield
+    # nothing to cleanup on shutdown
+
+
+app = FastAPI(
+    title="PaperSloth Multi-Modal RAG API",
+    version="1.0.0",
+    lifespan=lifespan,           # ← was missing before
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], 
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- Include Routers ---
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(search.router, prefix="/api/search", tags=["RAG Search"])
-app.include_router(papers.router, prefix="/api/papers", tags=["Paper Management"])
+# ── Route prefixes must match exactly what the frontend calls ────────────────
+#
+#   frontend/src/auth.ts  calls  /auth/register, /auth/login, /auth/me
+#   frontend/src/search.ts calls /api/search, /api/subjects, /api/papers
+#
+#   prefix + router path = final URL
+#   "/auth" + "/register"  = /auth/register          ✅
+#   "/api"  + "/search"    = /api/search              ✅
+#   "/api"  + "/subjects"  = /api/subjects            ✅
+#   "/api"  + "/papers"    = /api/papers              ✅
 
-# --- Health Check Route ---
+app.include_router(auth.router,    prefix="/auth", tags=["Authentication"])
+app.include_router(search.router,  prefix="/api",  tags=["RAG Search"])
+app.include_router(papers.router,  prefix="/api",  tags=["Paper Management"])
+
+
 @app.get("/")
 def health_check():
-    return {"status": "ok", "message": "Welcome to the PaperSloth API!"}
+    return {"status": "ok", "message": "PaperSloth API running"}
 
 
-
-def main():
-    print("🚀 Starting PaperSloth Backend Server...")
-    # Changed from "backend.main:app" to "main:app"
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
-
+# Run directly:  python main.py
+# Or via uvicorn: cd backend && uvicorn main:app --reload
 if __name__ == "__main__":
-    main()
+    import uvicorn
+    print("🚀 Starting PaperSloth Backend...")
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
