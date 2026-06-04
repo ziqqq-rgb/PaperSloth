@@ -421,11 +421,47 @@ function AppShell({ children }: { children: React.ReactNode }) {
   )
 }
 
+// ─── Exam Image ───────────────────────────────────────────────────────────────
+// Handles the loading → loaded / error lifecycle for each question image.
+// Shows a skeleton while the signed URL resolves, and a clear error state
+// instead of the browser's broken-image icon.
+
+function ExamImage({ url, label }: { url: string; label: string }) {
+  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+
+  return (
+    <div className="relative">
+      {status === 'loading' && (
+        <div className="w-48 h-28 rounded-lg bg-border/40 border border-border animate-pulse flex items-center justify-center">
+          <Loader2 size={14} className="text-muted/40 animate-spin" />
+        </div>
+      )}
+      {status === 'error' && (
+        <div className="w-48 h-28 rounded-lg bg-border/30 border border-border/60 flex flex-col items-center justify-center gap-1.5">
+          <ImageIcon size={16} className="text-muted/40" />
+          <span className="text-[10px] text-muted/50 font-mono text-center px-2">{label}</span>
+        </div>
+      )}
+      <img
+        src={url}
+        alt={label}
+        onLoad={() => setStatus('ok')}
+        onError={() => setStatus('error')}
+        className={cx(
+          'max-h-48 max-w-full rounded-lg border border-border object-contain transition-opacity duration-200',
+          status !== 'ok' && 'hidden'
+        )}
+      />
+    </div>
+  )
+}
+
 // ─── Source Card ──────────────────────────────────────────────────────────────
 
 function SourceCard({ source, index }: { source: Source; index: number }) {
   const [expanded, setExpanded] = useState(false)
-  const hasImages = Object.keys(source.image_urls ?? {}).length > 0
+  const imageEntries = Object.entries(source.image_urls ?? {})
+  const hasImages = imageEntries.length > 0
 
   return (
     <div className="card animate-fade-in border-border/70 overflow-hidden">
@@ -482,13 +518,8 @@ function SourceCard({ source, index }: { source: Source; index: number }) {
           )}
           {hasImages && (
             <div className="mt-3 flex flex-wrap gap-2">
-              {Object.values(source.image_urls).map((url, i) => (
-                <img
-                  key={i}
-                  src={url}
-                  alt="Question diagram"
-                  className="max-h-36 rounded-lg border border-border object-contain"
-                />
+              {imageEntries.map(([label, url]) => (
+                <ExamImage key={label} url={url} label={label} />
               ))}
             </div>
           )}
@@ -1156,13 +1187,8 @@ function PaperDetailModal({
 
                   {open && hasImages && (
                     <div className="mt-3 flex flex-wrap gap-2 pt-3 border-t border-border/60">
-                      {Object.values(q.image_urls).map((url: string, i) => (
-                        <img
-                          key={i}
-                          src={url}
-                          alt=""
-                          className="max-h-32 rounded-lg border border-border object-contain"
-                        />
+                      {Object.entries(q.image_urls).map(([label, url]: [string, string]) => (
+                        <ExamImage key={label} url={url} label={label} />
                       ))}
                     </div>
                   )}
