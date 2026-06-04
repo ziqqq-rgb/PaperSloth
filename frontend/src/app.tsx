@@ -87,6 +87,15 @@ const uid = () => Math.random().toString(36).slice(2)
 const cx = (...args: (string | false | null | undefined)[]) =>
   args.filter(Boolean).join(' ')
 
+const cleanSemester = (sem: string, year: number): string => {
+  let s = sem
+    .replace(/\bSEMESTER\b/gi, '')
+    .replace(new RegExp(`\\b${year}\\b`, 'g'), '')
+    .trim()
+  s = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+  return `${s} ${year}`
+}
+
 // ─── Auth Page ────────────────────────────────────────────────────────────────
 
 function AuthPage() {
@@ -427,34 +436,50 @@ function AppShell({ children }: { children: React.ReactNode }) {
 // instead of the browser's broken-image icon.
 
 function ExamImage({ url, label }: { url: string; label: string }) {
-  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading');
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center justify-center">
+      
+      {/* Loading State */}
       {status === 'loading' && (
-        <div className="w-48 h-28 rounded-lg bg-border/40 border border-border animate-pulse flex items-center justify-center">
-          <Loader2 size={14} className="text-muted/40 animate-spin" />
+        <div className="w-64 h-40 rounded-xl bg-border/40 border border-border animate-pulse flex items-center justify-center">
+          <Loader2 size={16} className="text-muted/40 animate-spin" />
         </div>
       )}
+
+      {/* Error State - Fixed <a> and <div> structure */}
       {status === 'error' && (
-        <div className="w-48 h-28 rounded-lg bg-border/30 border border-border/60 flex flex-col items-center justify-center gap-1.5">
-          <ImageIcon size={16} className="text-muted/40" />
-          <span className="text-[10px] text-muted/50 font-mono text-center px-2">{label}</span>
+        <div className="w-64 h-40 rounded-xl bg-border/30 border border-dashed border-border/60 flex flex-col items-center justify-center gap-2">
+          <ImageIcon size={20} className="text-muted/30" />
+          <span className="text-[10px] text-muted/40 font-mono text-center px-3">{label}</span>
+          <a 
+            href={url} 
+            target="_blank" 
+            rel="noreferrer" 
+            className="text-[10px] text-amber/60 hover:text-amber font-mono underline" 
+            onClick={e => e.stopPropagation()}
+          >
+            Open image ↗
+          </a>
         </div>
       )}
-      <img
-        src={url}
-        alt={label}
-        onLoad={() => setStatus('ok')}
-        onError={() => setStatus('error')}
+
+      {/* Image Element */}
+      <img 
+        src={url} 
+        alt={label} 
+        onLoad={() => setStatus('ok')} 
+        onError={() => setStatus('error')} 
         className={cx(
-          'max-h-48 max-w-full rounded-lg border border-border object-contain transition-opacity duration-200',
-          status !== 'ok' && 'hidden'
-        )}
+          'max-w-full max-h-80 rounded-xl border border-border object-contain',
+          status !== 'ok' && 'hidden' 
+        )} 
       />
     </div>
-  )
+  );
 }
+
 
 // ─── Source Card ──────────────────────────────────────────────────────────────
 
@@ -477,7 +502,7 @@ function SourceCard({ source, index }: { source: Source; index: number }) {
             {source.course_code}
           </span>
           <span className="text-[11px] text-muted font-mono">
-            {source.semester} {source.year}
+            {cleanSemester(source.semester, source.year)}
           </span>
           {source.question_number && (
             <span className="text-[11px] text-muted/70 font-mono">
@@ -516,13 +541,7 @@ function SourceCard({ source, index }: { source: Source; index: number }) {
               Full text not available
             </p>
           )}
-          {hasImages && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {imageEntries.map(([label, url]) => (
-                <ExamImage key={label} url={url} label={label} />
-              ))}
-            </div>
-          )}
+          
         </div>
       )}
     </div>
@@ -583,16 +602,44 @@ function MessageBubble({ message }: { message: Message }) {
           )}
         </div>
 
+        {!isUser && message.sources && message.sources.some(
+            s => Object.keys(s.image_urls ?? {}).length > 0
+          ) && (
+            <div className="mt-3 flex flex-wrap gap-3">
+              {message.sources
+                .flatMap(s =>
+                  Object.entries(s.image_urls ?? {}).map(([label, url]) => ({
+                    label: `${s.course_code} ${cleanSemester(s.semester, s.year)} · ${label}`,
+                    url,
+                  }))
+                )
+                .map(({ label, url }) => (
+                  <ExamImage key={label} url={url} label={label} />
+                ))}
+            </div>
+          )}
+
         {/* Sources */}
         {message.sources && message.sources.length > 0 && (
           <div className="mt-3 w-full space-y-2">
-            <div className="flex items-center gap-1.5 text-[11px] text-muted/70 font-mono">
-              <Database size={11} />
-              <span>
-                {message.sources.length} source
-                {message.sources.length > 1 ? 's' : ''} retrieved
-              </span>
-            </div>
+            {/* Inline image from top source only */}
+            {!message.isStreaming && (() => {
+              const topWithImages = message.sources?.find(
+                s => Object.keys(s.image_urls ?? {}).length > 0
+              )
+              if (!topWithImages) return null
+              return (
+                <div className="flex flex-col items-center gap-3 mb-3">
+                  {Object.entries(topWithImages.image_urls).map(([label, url]) => (
+                    <div key={label} className="flex flex-col items-center gap-1.5">
+                      <ExamImage url={url} label={label} />
+                      <span className="text-[10px] text-muted/50 font-mono">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+            {/* Source cards */}
             {message.sources.map((src, i) => (
               <SourceCard key={src.parent_id ?? i} source={src} index={i} />
             ))}
