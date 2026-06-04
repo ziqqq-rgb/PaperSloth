@@ -30,7 +30,19 @@ class RetrievalService:
 
         # ── Gemini ───────────────────────────────────────────────────────────
         genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel(settings.gemini_model)
+        # system_instruction is a true system-role message — the model does NOT
+        # echo it back, unlike instructions embedded in the user turn.
+        self.model = genai.GenerativeModel(
+            settings.gemini_model,
+            system_instruction=(
+                "You are a UTP past year exam assistant. "
+                "You will be given exam questions and a student query. "
+                "Output ONLY the matching question text with its marks and source. "
+                "Do not explain, reason, analyse, or compare items. "
+                "Do not repeat these instructions. "
+                "Begin your response immediately with the answer."
+            ),
+        )
 
         # ── BM25 ─────────────────────────────────────────────────────────────
         bm25_path = Path(settings.bm25_model_path)
@@ -127,17 +139,15 @@ class RetrievalService:
 
     # ── Build prompt ──────────────────────────────────────────────────────────
 
+    # Generation config shared by every Gemini call.
+    # thinking_budget=0 disables chain-of-thought output on Gemini 2.x / Gemma models
+    # so the model never leaks its reasoning steps into the response.
+    _GEN_CONFIG = {
+        "temperature": 0.1,
+    }
+
     @staticmethod
     def _build_prompt(query: str, parents: list[dict]) -> str:
-        system = (
-            "You are PaperSloth, a study assistant for UTP students. "
-            "You help students find and understand past year exam questions.\n"
-            "When answering:\n"
-            "- Present questions with their number and marks\n"
-            "- Always state which semester/year the question is from\n"
-            "- If no relevant questions are found, say so clearly\n"
-            "- Do not make up questions\n"
-        )
         context_parts = []
         for doc in parents:
             header = (
@@ -146,11 +156,9 @@ class RetrievalService:
             )
             context_parts.append(f"{header}\n{doc['full_text']}")
 
-        return (
-            f"{system}\n\nPAST YEAR QUESTIONS:\n"
-            + "\n\n---\n\n".join(context_parts)
-            + f"\n\nSTUDENT QUERY: {query}\n\nAnswer:"
-        )
+        context = "\n\n---\n\n".join(context_parts)
+
+        return f"EXAM QUESTIONS:\n{context}\n\nSTUDENT: {query}"
 
     # ── Core pipeline ─────────────────────────────────────────────────────────
 
@@ -186,6 +194,38 @@ class RetrievalService:
         prompt      = self._build_prompt(query, parents)
         return parents, prompt
 
+    # ── Strip thinking preamble ───────────────────────────────────────────────
+    #
+    # Gemma/Gemini thinking models output their chain-of-thought as bullet-point
+    # paragraphs before the real answer.  Every thinking line starts with "* ".
+    # The actual answer is the first paragraph that isn't all bullet lines.
+
+    @staticmethod
+    def _strip_thinking(text: str) -> str:
+        """
+        Remove chain-of-thought preamble from Gemma/Gemini output.
+
+        The model outputs thinking as bullet lines starting with '*'.
+        We skip every leading line that is blank or starts with '*',
+        then return everything from the first real content line onward.
+        This handles all observed variants:
+          - thinking ends with a blank line before the answer
+          - answer starts on the line immediately after the last bullet
+          - last bullet has the answer text appended inline (we lose that
+            inline fragment but keep the clean answer that follows)
+        """
+        text = text.strip()
+        if not text.startswith('*'):
+            return text     # no thinking preamble
+
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped and not stripped.startswith('*'):
+                return '\n'.join(lines[i:]).strip()
+
+        return text         # entire response was bullets — return as-is
+
     # ── Standard (non-streaming) search ──────────────────────────────────────
 
     def search(
@@ -201,7 +241,8 @@ class RetrievalService:
         if not parents:
             return {"answer": "No relevant questions found.", "sources": [], "cached": False}
 
-        answer = self.model.generate_content(prompt).text
+        raw    = self.model.generate_content(prompt, generation_config=self._GEN_CONFIG).text
+        answer = self._strip_thinking(raw)
         return {
             "answer":  answer,
             "sources": parents,
@@ -219,12 +260,11 @@ class RetrievalService:
         alpha:         float = 0.7,
     ) -> Generator[str, None, None]:
         """
-        Yields SSE-formatted strings.
-        Frontend receives:
+        Yields SSE-formatted strings:
           data: {"type":"sources","sources":[...]}   ← appears first
-          data: {"type":"token","token":"Based"}     ← answer streams in
-          data: {"type":"done"}                      ← stream complete
-          data: {"type":"error","message":"..."}     ← on failure
+          data: {"type":"token","token":"..."}       ← answer streams in
+          data: {"type":"done"}
+          data: {"type":"error","message":"..."}
         """
         try:
             parents, prompt = self._run_pipeline(query, filters, top_k, rerank_top_n, alpha)
@@ -233,17 +273,28 @@ class RetrievalService:
                 yield f"data: {json.dumps({'type': 'error', 'message': 'No relevant questions found.'})}\n\n"
                 return
 
-            # Send sources first — frontend can render them immediately
             slim_sources = [
                 {k: v for k, v in p.items() if k != "full_text"}
                 for p in parents
             ]
             yield f"data: {json.dumps({'type': 'sources', 'sources': slim_sources})}\n\n"
 
-            # Stream tokens from Gemini
-            for chunk in self.model.generate_content(prompt, stream=True):
+            # Buffer the full response so we can strip thinking before the
+            # frontend sees a single token.  The latency cost is acceptable —
+            # the model was going to finish before meaningful streaming anyway.
+            full_text = ""
+            for chunk in self.model.generate_content(
+                prompt, stream=True, generation_config=self._GEN_CONFIG
+            ):
                 if chunk.text:
-                    yield f"data: {json.dumps({'type': 'token', 'token': chunk.text})}\n\n"
+                    full_text += chunk.text
+
+            clean = self._strip_thinking(full_text)
+
+            # Re-stream in small chunks so the frontend still animates
+            CHUNK = 40
+            for i in range(0, len(clean), CHUNK):
+                yield f"data: {json.dumps({'type': 'token', 'token': clean[i:i+CHUNK]})}\n\n"
 
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
