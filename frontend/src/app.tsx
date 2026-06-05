@@ -549,42 +549,27 @@ function SourceCard({ source, index }: { source: Source; index: number }) {
 }
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
-
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === 'user'
 
   return (
-    <div
-      className={cx(
-        'flex gap-3 animate-slide-up',
-        isUser && 'flex-row-reverse'
-      )}
-    >
+    <div className={cx('flex gap-3 animate-slide-up', isUser && 'flex-row-reverse')}>
       {/* Avatar */}
       <div
         className={cx(
           'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border',
-          isUser
-            ? 'bg-border/60 border-border'
-            : 'bg-amber/8 border-amber/20'
+          isUser ? 'bg-border/60 border-border' : 'bg-amber/8 border-amber/20'
         )}
       >
         {isUser ? (
-          <span className="text-[10px] text-muted font-mono font-semibold">
-            you
-          </span>
+          <span className="text-[10px] text-muted font-mono font-semibold">you</span>
         ) : (
           <Sparkles size={13} className="text-amber" />
         )}
       </div>
 
-      {/* Bubble + sources */}
-      <div
-        className={cx(
-          'flex-1 max-w-[85%]',
-          isUser && 'flex flex-col items-end'
-        )}
-      >
+      {/* Bubble + images */}
+      <div className={cx('flex-1 max-w-[85%]', isUser && 'flex flex-col items-end')}>
         <div
           className={cx(
             'rounded-xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap',
@@ -602,37 +587,14 @@ function MessageBubble({ message }: { message: Message }) {
           )}
         </div>
 
-        {!isUser && message.sources && message.sources.some(
-            s => Object.keys(s.image_urls ?? {}).length > 0
-          ) && (
-            <div className="mt-3 flex flex-wrap gap-3">
-              {message.sources
-                .flatMap(s =>
-                  Object.entries(s.image_urls ?? {}).map(([label, url]) => ({
-                    label: `${s.course_code} ${cleanSemester(s.semester, s.year)} · ${label}`,
-                    url,
-                  }))
-                )
-                .map(({ label, url }) => (
-                  <ExamImage key={label} url={url} label={label} />
-                ))}
-            </div>
-          )}
-
-        {/* Sources — only show image from the matched source, no cards */}
+        {/* Images from top-ranked source only, shown after streaming completes */}
         {!isUser && !message.isStreaming && message.sources && message.sources.length > 0 && (() => {
-          const matched = message.sources[0]  // top reranked result is always index 0
-          const images = Object.entries(matched.image_urls ?? {})
+          const images = Object.entries(message.sources[0].image_urls ?? {})
           if (images.length === 0) return null
           return (
             <div className="mt-4 flex flex-col items-center gap-2">
-              {images.map(([label, src]) => (
-                <img
-                  key={label}
-                  src={src}
-                  alt={label}
-                  className="max-w-full rounded-xl border border-border object-contain"
-                />
+              {images.map(([label, url]) => (
+                <ExamImage key={label} url={url} label={label} />
               ))}
             </div>
           )
