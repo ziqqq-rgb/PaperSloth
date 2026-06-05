@@ -619,32 +619,24 @@ function MessageBubble({ message }: { message: Message }) {
             </div>
           )}
 
-        {/* Sources */}
-        {message.sources && message.sources.length > 0 && (
-          <div className="mt-3 w-full space-y-2">
-            {/* Inline image from top source only */}
-            {!message.isStreaming && (() => {
-              const topWithImages = message.sources?.find(
-                s => Object.keys(s.image_urls ?? {}).length > 0
-              )
-              if (!topWithImages) return null
-              return (
-                <div className="flex flex-col items-center gap-3 mb-3">
-                  {Object.entries(topWithImages.image_urls).map(([label, url]) => (
-                    <div key={label} className="flex flex-col items-center gap-1.5">
-                      <ExamImage url={url} label={label} />
-                      <span className="text-[10px] text-muted/50 font-mono">{label}</span>
-                    </div>
-                  ))}
-                </div>
-              )
-            })()}
-            {/* Source cards */}
-            {message.sources.map((src, i) => (
-              <SourceCard key={src.parent_id ?? i} source={src} index={i} />
-            ))}
-          </div>
-        )}
+        {/* Sources — only show image from the matched source, no cards */}
+        {!isUser && !message.isStreaming && message.sources && message.sources.length > 0 && (() => {
+          const matched = message.sources[0]  // top reranked result is always index 0
+          const images = Object.entries(matched.image_urls ?? {})
+          if (images.length === 0) return null
+          return (
+            <div className="mt-4 flex flex-col items-center gap-2">
+              {images.map(([label, src]) => (
+                <img
+                  key={label}
+                  src={src}
+                  alt={label}
+                  className="max-w-full rounded-xl border border-border object-contain"
+                />
+              ))}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

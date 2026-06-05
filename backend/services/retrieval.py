@@ -111,32 +111,61 @@ class RetrievalService:
     # ── Parent fetch ──────────────────────────────────────────────────────────
 
     @staticmethod
+    def _url_to_base64(url: str) -> str:
+        """Fetch image from Supabase storage and return as base64 data URI."""
+        import requests, base64, mimetypes
+        from core.config import settings
+
+        # Fix malformed URL if needed
+        clean_url = url.replace("/rest/v1/storage/", "/storage/")
+
+        headers = {
+            "apikey": settings.supabase_key,
+            "Authorization": f"Bearer {settings.supabase_key}",
+        }
+        try:
+            resp = requests.get(clean_url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                mime = resp.headers.get("content-type", "image/png").split(";")[0]
+                b64 = base64.b64encode(resp.content).decode()
+                return f"data:{mime};base64,{b64}"
+        except Exception:
+            pass
+        return clean_url  # fallback to original URL
+
+    @staticmethod
     def fetch_parents(parent_ids: list[str]) -> list[dict]:
         if not parent_ids:
             return []
         rows = execute_query(
             """
             SELECT parent_id, question_number, full_text, total_marks,
-                   image_urls, course_code, semester, year
+                image_urls, course_code, semester, year
             FROM   parent_chunks
             WHERE  parent_id = ANY(%s)
             """,
             (parent_ids,),
         )
-        return [
-            {
+
+        results = []
+        for r in (rows or []):
+            raw_urls = r[4] or {}
+            b64_urls = {
+                label: RetrievalService._url_to_base64(url)
+                for label, url in raw_urls.items()
+            }
+            results.append({
                 "parent_id":       r[0],
                 "question_number": r[1],
                 "full_text":       r[2],
                 "total_marks":     r[3],
-                "image_urls":      r[4] or {},
+                "image_urls":      b64_urls,
                 "course_code":     r[5],
                 "semester":        r[6],
                 "year":            r[7],
-            }
-            for r in (rows or [])
-        ]
+            })
 
+        return results
     # ── Build prompt ──────────────────────────────────────────────────────────
 
     # Generation config shared by every Gemini call.
