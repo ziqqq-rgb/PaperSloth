@@ -1,8 +1,18 @@
+"""
+routers/search.py
+─────────────────
+Search endpoints for PaperSloth.
+
+  POST /search           → standard JSON response (cached)
+  POST /search/stream    → SSE streaming (legacy, direct retrieval)
+  POST /search/agent     → SSE streaming (intent-aware, multi-turn memory)
+"""
+
 from typing import Optional
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sse_starlette.sse import EventSourceResponse
 
 from core.security import get_current_user
 from services.cache import cache_get, cache_set
@@ -14,17 +24,17 @@ router = APIRouter()
 
 class SearchRequest(BaseModel):
     query:         str
-    course_code:   Optional[str] = None
-    year:          Optional[int] = None
-    semester:      Optional[str] = None
-    question_type: Optional[str] = None   # calculation | theory | diagram | table
-    min_marks:     Optional[int] = None
-    top_k:         int           = 20
-    rerank_top_n:  int           = 5
-    alpha:         float         = 0.7    # 0=sparse only, 1=dense only
+    course_code:   Optional[str]   = None
+    year:          Optional[int]   = None
+    semester:      Optional[str]   = None
+    question_type: Optional[str]   = None   # calculation | theory | diagram | table
+    min_marks:     Optional[int]   = None
+    top_k:         int             = 20
+    rerank_top_n:  int             = 5
+    alpha:         float           = 0.7    # 0 = sparse only, 1 = dense only
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ── POST /search  (standard JSON) ─────────────────────────────────────────────
 
 @router.post("/search")
 def search(
@@ -34,16 +44,18 @@ def search(
 ):
     """
     Standard search — returns full JSON response.
-    Use this for simple queries where streaming is not needed.
+    Response is cached in Redis by (query, filters) key.
     """
     svc = request.app.state.retrieval
 
     filters = svc.build_filter(
-        body.course_code, body.year, body.semester,
-        body.question_type, body.min_marks,
+        body.course_code,
+        body.year,
+        body.semester,
+        body.question_type,
+        body.min_marks,
     )
 
-    # Check cache first
     cached = cache_get(body.query, filters)
     if cached:
         cached["cached"] = True
@@ -61,6 +73,8 @@ def search(
     return result
 
 
+# ── POST /search/stream  (SSE, direct retrieval — no agent) ──────────────────
+
 @router.post("/search/stream")
 def search_stream(
     body:         SearchRequest,
@@ -68,24 +82,22 @@ def search_stream(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Streaming search — returns Server-Sent Events.
+    Streaming search using the retrieval pipeline directly (no intent routing).
 
-    Client receives events in this order:
-      1. { type: 'sources', sources: [...] }   ← show sources immediately
-      2. { type: 'token',   token:   '...' }   ← answer tokens stream in
-      3. { type: 'done' }                       ← stream finished
-      4. { type: 'error',   message: '...' }   ← only on failure
-
-    Usage with fetch() in React:
-      const res = await fetch('/api/search/stream', { method:'POST', body:... })
-      const reader = res.body.getReader()
-      // read chunks, parse 'data: {...}' lines
+    Client receives SSE events in order:
+      1. { type: 'sources', sources: [...] }
+      2. { type: 'token',   token:   '...' }  (repeated)
+      3. { type: 'done' }
+      4. { type: 'error',   message: '...' }  (only on failure)
     """
     svc = request.app.state.retrieval
 
     filters = svc.build_filter(
-        body.course_code, body.year, body.semester,
-        body.question_type, body.min_marks,
+        body.course_code,
+        body.year,
+        body.semester,
+        body.question_type,
+        body.min_marks,
     )
 
     def event_generator():
@@ -101,10 +113,13 @@ def search_stream(
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control":               "no-cache",
-            "X-Accel-Buffering":           "no",   # disable nginx buffering
+            "Cache-Control":     "no-cache",
+            "X-Accel-Buffering": "no",
         },
     )
+
+
+# ── POST /search/agent  (SSE, intent-aware, multi-turn memory) ────────────────
 
 @router.post("/search/agent")
 def agent_search(
@@ -113,24 +128,39 @@ def agent_search(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Intent-aware search. Routes to the right handler based on query type.
-    Always streams SSE.
-    """
-    from services.intent import classify
-    from services.agents import handle
+    Intent-aware streaming search backed by the LangGraph agent.
 
-    intent = classify(body.query)
-    svc    = request.app.state.retrieval
+    Memory is scoped per user: thread_id = current_user["id"].
+    Follow-up questions ("what about part b?", "and Q3?") automatically
+    inherit context from the user's previous turns in this session.
+
+    SSE event stream:
+      1. { type: 'intent',  intent: '...', slots: {...} }
+      2. { type: 'sources', sources: [...] }              (most intents)
+      3. { type: 'token',   token:   '...' }              (repeated)
+      4. { type: 'done' }
+      5. { type: 'error',   message: '...' }              (only on failure)
+      6. { type: 'tutor_start', ... }                     (tutor_mode only)
+    """
+    from services.agents import handle  # late import avoids circular deps at startup
+
+    svc       = request.app.state.retrieval
+    # Scope memory to the authenticated user so histories never bleed across users
+    thread_id = current_user["id"]
 
     def event_generator():
-        # First event always tells the frontend what mode we're in
-        import json
-        yield f"data: {json.dumps({'type': 'intent', 'intent': intent.type, 'slots': intent.slots})}\n\n"
-        yield from handle(intent, body, svc)
+        yield from handle(
+            query     = body.query,
+            body      = body,
+            svc       = svc,
+            thread_id = thread_id,
+        )
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control":     "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
-

@@ -10,10 +10,10 @@ import ollama
 from pinecone import Pinecone
 from sentence_transformers import CrossEncoder
 
-from agents import TUTOR_SYSTEM
+from services.promts import TUTOR_SYSTEM, RAG_SYSTEM
 from core.config import settings
 from core.database import execute_query
-
+    
 
 class RetrievalService:
     def __init__(self):
@@ -32,14 +32,7 @@ class RetrievalService:
         
         self.model = genai.GenerativeModel(
             settings.gemini_model,
-            system_instruction=(
-                "You are a UTP past year exam assistant. "
-                "You will be given exam questions and a student query. "
-                "Output ONLY the matching question text with its marks and source. "
-                "Do not explain, reason, analyse, or compare items. "
-                "Do not repeat these instructions. "
-                "Begin your response immediately with the answer."
-            ),
+            system_instruction=(RAG_SYSTEM),
         )
 
         # ── BM25 ─────────────────────────────────────────────────────────────
