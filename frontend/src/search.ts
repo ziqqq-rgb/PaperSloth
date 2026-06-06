@@ -56,10 +56,12 @@ export const searchApi = {
 
 // Streaming search — returns SSE
 export type StreamEvent =
-  | { type: 'sources'; sources: Source[] }
-  | { type: 'token';   token: string }
+  | { type: 'intent';      intent: string; slots: Record<string, unknown> }
+  | { type: 'tutor_start'; question_number: string; course_code: string; year: number; semester: string; sub_parts: string[]; full_text: string }
+  | { type: 'sources';     sources: Source[] }
+  | { type: 'token';       token: string }
   | { type: 'done' }
-  | { type: 'error';   message: string }
+  | { type: 'error';       message: string }
 
 export async function* streamSearch(
   query:   string,
@@ -67,7 +69,7 @@ export async function* streamSearch(
 ): AsyncGenerator<StreamEvent> {
   const token = useAuthStore.getState().token
 
-  const res = await fetch('/api/search/stream', {
+  const res = await fetch('/api/search/agent', {
     method:  'POST',
     headers: {
       'Content-Type':  'application/json',

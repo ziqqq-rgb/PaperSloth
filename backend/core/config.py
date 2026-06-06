@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     jwt_secret: str = os.getenv("JWT_SECRET_KEY")
     jwt_expire_hours: int = 24
 
+    gemini_flash_model: str = "gemini-3.1-flash-lite"   
+    gemini_model:       str = "gemma-4-31b-it" 
+
     class Config:
         env_file = ".env"
 

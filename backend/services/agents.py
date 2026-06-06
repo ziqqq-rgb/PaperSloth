@@ -1,0 +1,250 @@
+"""
+Handler dispatch — one function per intent type.
+Each yields SSE strings, same protocol as retrieval.stream().
+"""
+import json
+from typing import Generator
+from core.database import execute_query
+
+# In RetrievalService.__init__ (or lazily in agents.py):
+self.flash = genai.GenerativeModel(
+    settings.gemini_flash_model,
+    system_instruction=TUTOR_SYSTEM,
+)
+self.model = genai.GenerativeModel(
+    settings.gemini_model,
+    system_instruction="..."  # existing
+)
+
+
+def handle(intent, body, svc) -> Generator[str, None, None]:
+    dispatch = {
+        'fetch_paper':    _fetch_paper,
+        'topic_search':   _topic_search,
+        'tutor_mode':     _tutor_mode,
+        'trend_analysis': _trend_analysis,
+        'rag_search':     _rag_search,
+    }
+    handler = dispatch.get(intent.type, _rag_search)
+    yield from handler(intent, body, svc)
+
+
+def _rag_search(intent, body, svc):
+    """Existing pipeline — no change."""
+    filters = svc.build_filter(
+        body.course_code, body.year, body.semester,
+        body.question_type, body.min_marks,
+    )
+    yield from svc.stream(body.query, filters, body.top_k, body.rerank_top_n, body.alpha)
+
+
+def _fetch_paper(intent, body, svc):
+    """
+    Student asked for a specific question. Fetch it directly from Postgres
+    instead of going through RAG — exact match is better than semantic search here.
+    """
+    slots = intent.slots
+    qnum  = slots.get('question_number') or body.query  # fallback
+
+    course = body.course_code or _extract_course(body.query)
+    year   = body.year   or slots.get('year')
+    sem    = body.semester or slots.get('semester')
+
+    if not (course and year and sem):
+        # Not enough info — fall back to RAG with a note
+        yield f"data: {json.dumps({'type': 'token', 'token': 'I need the subject code, year, and semester to fetch that directly. Searching semantically instead…\n\n'})}\n\n"
+        yield from _rag_search(intent, body, svc)
+        return
+
+    rows = execute_query("""
+        SELECT parent_id, question_number, full_text, total_marks, image_urls
+        FROM   parent_chunks
+        WHERE  course_code = %s AND year = %s AND semester = %s
+          AND  question_number = %s
+        LIMIT 1
+    """, (course, year, sem, str(qnum)))
+
+    if not rows:
+        yield f"data: {json.dumps({'type': 'token', 'token': f'Q{qnum} not found in {course} {sem} {year}. Searching semantically…\n\n'})}\n\n"
+        yield from _rag_search(intent, body, svc)
+        return
+
+    r = rows[0]
+    sources = [{
+        "parent_id":       r[0],
+        "question_number": r[1],
+        "full_text":       r[2],
+        "total_marks":     r[3],
+        "image_urls":      r[4] or {},
+        "course_code":     course,
+        "semester":        sem,
+        "year":            year,
+    }]
+    yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+    yield f"data: {json.dumps({'type': 'token', 'token': f'**Q{qnum} — {course} {sem} {year}** ({r[3]} marks)\n\n{r[2]}'})}\n\n"
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
+def _topic_search(intent, body, svc):
+    """
+    Aggregate topics via SQL — don't use RAG.
+    Groups by question number, counts appearances.
+    """
+    course = body.course_code or _extract_course(body.query)
+    year   = body.year or intent.slots.get('year')
+
+    conditions = ["1=1"]
+    params = []
+    if course:
+        conditions.append("course_code = %s"); params.append(course)
+    if year:
+        conditions.append("year = %s"); params.append(year)
+
+    rows = execute_query(f"""
+        SELECT question_number,
+               COUNT(*)                                                    AS times,
+               array_agg(DISTINCT year || ' ' || semester ORDER BY 1 DESC) AS appearances,
+               (array_agg(full_text ORDER BY year DESC))[1]                AS sample
+        FROM   parent_chunks
+        WHERE  {" AND ".join(conditions)}
+        GROUP  BY question_number
+        ORDER  BY question_number::int
+    """, params or None)
+
+    if not rows:
+        yield f"data: {json.dumps({'type': 'token', 'token': 'No papers found for those filters.'})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        return
+
+    label = f"{course} " if course else ""
+    label += f"{year}" if year else "all years"
+
+    lines = [f"### Topics in {label}\n"]
+    for r in rows:
+        q, times, appearances, sample = r
+        preview = (sample or '')[:120].replace('\n', ' ')
+        appeared = ', '.join(appearances[:3])  # show max 3 recent
+        lines.append(f"**Q{q}** — appeared {times}× ({appeared})\n_{preview}…_\n")
+
+    text = '\n'.join(lines)
+    # Stream in chunks so it feels live
+    CHUNK = 60
+    for i in range(0, len(text), CHUNK):
+        import time
+        yield f"data: {json.dumps({'type': 'token', 'token': text[i:i+CHUNK]})}\n\n"
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
+def _tutor_mode(intent, body, svc):
+    """
+    Student wants help with a question, not just to see it.
+    First turn: fetch the question, then ask which sub-part to start with.
+    The frontend tracks tutor state and sends follow-up turns back here.
+    """
+    slots  = intent.slots
+    course = body.course_code or _extract_course(body.query)
+    year   = body.year   or slots.get('year')
+    sem    = body.semester or slots.get('semester')
+    qnum   = slots.get('question_number')
+
+    if not (course and year and sem and qnum):
+        msg = (
+            "I'd love to help! To pull up the right question, could you tell me:\n\n"
+            + ("" if course else "- Which subject? (e.g. `UPCE3273`)\n")
+            + ("" if year   else "- Which year? (e.g. `2025`)\n")
+            + ("" if sem    else "- Which semester? (e.g. `May`)\n")
+            + ("" if qnum   else "- Which question number? (e.g. `Q2`)\n")
+        )
+        yield f"data: {json.dumps({'type': 'token', 'token': msg})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        return
+
+    rows = execute_query("""
+        SELECT full_text, total_marks, children
+        FROM   parent_chunks
+        WHERE  course_code = %s AND year = %s AND semester = %s
+          AND  question_number = %s
+        LIMIT 1
+    """, (course, year, sem, str(qnum)))
+
+    if not rows:
+        # Added opening " for the f-string, escaped quotes for JSON keys, and fixed syntax
+        yield f"data: {json.dumps({'type': 'token', 'token': f'\"I couldn't find Q{qnum} in {course} {sem} {year}. Try checking the subject code or semester spelling.\"'})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        return
+
+
+    full_text, marks, children = rows[0]
+
+    # Parse sub-parts from children or from the question text
+    sub_parts = _extract_sub_parts(full_text, children)
+    parts_list = '\n'.join([f"- Part **({p})**" for p in sub_parts]) if sub_parts else ""
+
+    greeting = (
+        f"Sure! Let's work through **Q{qnum}** from {course} {sem} {year} ({marks} marks).\n\n"
+        f"This question has {len(sub_parts)} part{'s' if len(sub_parts) != 1 else ''}:\n"
+        f"{parts_list}\n\n"
+        f"Which part would you like to start with — or shall we go through them in order?"
+    )
+
+    # Emit a special tutor_start event so the frontend can track state
+    yield f"data: {json.dumps({'type': 'tutor_start', 'question_number': qnum, 'course_code': course, 'year': year, 'semester': sem, 'sub_parts': sub_parts, 'full_text': full_text})}\n\n"
+    yield f"data: {json.dumps({'type': 'token', 'token': greeting})}\n\n"
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
+def _trend_analysis(intent, body, svc):
+    """SQL-based trend: which topics appear most across years."""
+    course = body.course_code or _extract_course(body.query)
+
+    rows = execute_query("""
+        SELECT question_number,
+               COUNT(DISTINCT year)  AS year_count,
+               array_agg(DISTINCT year ORDER BY year DESC) AS years
+        FROM   parent_chunks
+        WHERE  course_code = %s
+        GROUP  BY question_number
+        HAVING COUNT(DISTINCT year) > 1
+        ORDER  BY year_count DESC, question_number::int
+        LIMIT 10
+    """, (course,)) if course else []
+
+    if not rows:
+        yield f"data: {json.dumps({'type': 'token', 'token': 'Need a subject code to analyse trends. Try filtering by subject first.'})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        return
+
+    lines = [f"### {course} — recurring topics\n\n"]
+    for r in rows:
+        qnum, ycount, years = r
+        lines.append(f"**Q{qnum}** appeared in {ycount} different years: {', '.join(str(y) for y in years)}\n")
+
+    text = ''.join(lines)
+    CHUNK = 60
+    for i in range(0, len(text), CHUNK):
+        yield f"data: {json.dumps({'type': 'token', 'token': text[i:i+CHUNK]})}\n\n"
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _extract_course(query: str) -> str | None:
+    """Pull a UTP course code like UPCE3273 or ICB3813 from the query."""
+    import re
+    m = re.search(r'\b([A-Z]{2,4}\d{4})\b', query, re.I)
+    return m.group(1).upper() if m else None
+
+
+def _extract_sub_parts(full_text: str, children) -> list[str]:
+    """Extract sub-part labels (a, b, c, i, ii, iii) from question text."""
+    import re
+    if children and isinstance(children, list) and len(children) > 1:
+        return [str(i+1) for i in range(len(children))]
+    # Regex fallback: look for (a), (b), (i), (ii) patterns
+    parts = re.findall(r'\(([a-z]+)\)', full_text[:800])
+    seen, unique = set(), []
+    for p in parts:
+        if p not in seen:
+            seen.add(p)
+            unique.append(p)
+    return unique or ['a']  # default to single part

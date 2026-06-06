@@ -220,3 +220,49 @@ def download_paper(
         "file_size_kb": file_size_kb,
         "expires_in":   3600,
     }
+
+@router.get("/papers/{course_code}/topics")
+def get_topic_frequency(
+    course_code: str,
+    year: Optional[int] = Query(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Aggregates question topics across papers for a subject.
+    Returns per-question frequency and which semesters it appeared in.
+    """
+    conditions = ["course_code = %s"]
+    params = [course_code]
+    if year:
+        conditions.append("year = %s")
+        params.append(year)
+
+    where = " AND ".join(conditions)
+
+    rows = execute_query(f"""
+        SELECT
+            question_number,
+            COUNT(*)                            AS appearances,
+            array_agg(DISTINCT year ORDER BY year DESC) AS years,
+            array_agg(DISTINCT semester)        AS semesters,
+            -- grab the full_text from the most recent paper
+            (array_agg(full_text ORDER BY year DESC, semester DESC))[1] AS sample_text
+        FROM parent_chunks
+        WHERE {where}
+        GROUP BY question_number
+        ORDER BY question_number::int;
+    """, params)
+
+    return {
+        "course_code": course_code,
+        "topics": [
+            {
+                "question_number": r[0],
+                "appearances":     r[1],
+                "years":           r[2],
+                "semesters":       r[3],
+                "sample_text":     r[4],
+            }
+            for r in (rows or [])
+        ]
+    }

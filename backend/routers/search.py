@@ -105,3 +105,31 @@ def search_stream(
             "X-Accel-Buffering":           "no",   # disable nginx buffering
         },
     )
+
+@router.post("/search/agent")
+def agent_search(
+    body:         SearchRequest,
+    request:      Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Intent-aware search. Routes to the right handler based on query type.
+    Always streams SSE.
+    """
+    from services.intent import classify
+    from services.agents import handle
+
+    intent = classify(body.query)
+    svc    = request.app.state.retrieval
+
+    def event_generator():
+        # First event always tells the frontend what mode we're in
+        import json
+        yield f"data: {json.dumps({'type': 'intent', 'intent': intent.type, 'slots': intent.slots})}\n\n"
+        yield from handle(intent, body, svc)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
