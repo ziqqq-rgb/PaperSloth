@@ -101,9 +101,9 @@ def _topic_search(intent, body, svc):
 
     rows = execute_query(f"""
         SELECT question_number,
-               COUNT(*)                                                    AS times,
-               array_agg(DISTINCT year || ' ' || semester ORDER BY 1 DESC) AS appearances,
-               (array_agg(full_text ORDER BY year DESC))[1]                AS sample
+            COUNT(*)                                                              AS times,
+            array_agg(DISTINCT year || ' ' || semester)                          AS appearances,
+            (array_agg(full_text ORDER BY year DESC, semester DESC))[1]          AS sample
         FROM   parent_chunks
         WHERE  {" AND ".join(conditions)}
         GROUP  BY question_number
