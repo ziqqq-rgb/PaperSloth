@@ -24,3 +24,5 @@ env/
 .DS_Store
 *.log
 backend/core/config.py
+frontend/package-lock.json
+frontend/package.json

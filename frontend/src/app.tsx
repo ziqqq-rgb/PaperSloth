@@ -556,42 +556,143 @@ function MessageBubble({ message }: { message: Message }) {
 
   return (
     <div className={cx('flex gap-3 animate-slide-up', isUser && 'flex-row-reverse')}>
-      <div
-        className={cx(
-          'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border',
-          isUser ? 'bg-border/60 border-border' : 'bg-amber/8 border-amber/20'
-        )}
-      >
-        {isUser ? (
-          <span className="text-[10px] text-muted font-mono font-semibold">you</span>
-        ) : (
-          <Sparkles size={13} className="text-amber" />
-        )}
+      {/* Avatar */}
+      <div className={cx(
+        'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border',
+        isUser
+          ? 'bg-border/60 border-border'
+          : 'bg-amber/8 border-amber/20'
+      )}>
+        {isUser
+          ? <span className="text-[10px] text-muted font-mono font-semibold">you</span>
+          : <Sparkles size={13} className="text-amber" />
+        }
       </div>
 
+      {/* Bubble */}
       <div className={cx('flex-1 max-w-[85%]', isUser && 'flex flex-col items-end')}>
-        <div
-          className={cx(
-            'rounded-xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap',
-            isUser
-              ? 'bg-amber/8 border border-amber/20 text-text'
-              : 'bg-surface border border-border text-text'
-          )}
-        >
-          {message.content}
-          {message.isStreaming && (
-            <span className="inline-block w-[3px] h-[1em] bg-amber animate-blink rounded-sm ml-0.5 align-middle" />
-          )}
-          {!message.content && !message.isStreaming && (
-            <span className="text-muted/50 italic text-xs">No response</span>
-          )}
-        </div>
 
+        {isUser ? (
+          // User messages — plain text, pill style
+          <div className="bg-surface border border-border rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm text-text leading-relaxed">
+            {message.content}
+          </div>
+        ) : message.isStreaming ? (
+          // Streaming — raw text with blinking cursor, no markdown parse mid-stream
+          <div className="text-sm text-text leading-relaxed whitespace-pre-wrap">
+            {message.content}
+            <span className="inline-block w-[2px] h-[1em] bg-amber ml-0.5 animate-blink align-middle" />
+          </div>
+        ) : (
+          // Finished — full markdown render
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            <ReactMarkdown
+              components={{
+                // Headings
+                h1: ({children}) => (
+                  <h1 className="text-base font-semibold text-text mt-4 mb-2 first:mt-0">{children}</h1>
+                ),
+                h2: ({children}) => (
+                  <h2 className="text-[0.95rem] font-semibold text-text mt-3 mb-1.5 first:mt-0">{children}</h2>
+                ),
+                h3: ({children}) => (
+                  <h3 className="text-sm font-semibold text-text mt-2.5 mb-1 first:mt-0">{children}</h3>
+                ),
+                // Paragraphs
+                p: ({children}) => (
+                  <p className="text-sm text-text leading-relaxed mb-2 last:mb-0">{children}</p>
+                ),
+                // Lists
+                ul: ({children}) => (
+                  <ul className="my-1.5 space-y-0.5 list-none pl-0">{children}</ul>
+                ),
+                ol: ({children}) => (
+                  <ol className="my-1.5 space-y-0.5 list-decimal pl-5">{children}</ol>
+                ),
+                li: ({children}) => (
+                  <li className="text-sm text-text leading-relaxed flex gap-2 items-start">
+                    <span className="text-amber mt-[0.35em] shrink-0 text-xs">•</span>
+                    <span>{children}</span>
+                  </li>
+                ),
+                // Bold / italic
+                strong: ({children}) => (
+                  <strong className="font-semibold text-text">{children}</strong>
+                ),
+                em: ({children}) => (
+                  <em className="italic text-muted">{children}</em>
+                ),
+                // Inline code
+                code: ({children, className}) => {
+                  const isBlock = className?.includes('language-')
+                  return isBlock ? (
+                    <code className={className}>{children}</code>
+                  ) : (
+                    <code className="font-mono text-[0.8em] text-amber bg-amber/8 border border-amber/15 px-1.5 py-0.5 rounded">
+                      {children}
+                    </code>
+                  )
+                },
+                // Code blocks
+                pre: ({children}) => (
+                  <pre className="bg-surface border border-border rounded-xl px-4 py-3 overflow-x-auto my-2 text-xs font-mono text-text">
+                    {children}
+                  </pre>
+                ),
+                // Blockquote
+                blockquote: ({children}) => (
+                  <blockquote className="border-l-2 border-amber/50 pl-3 my-2 text-muted italic">
+                    {children}
+                  </blockquote>
+                ),
+                // Horizontal rule
+                hr: () => <hr className="border-border my-3" />,
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
+
+        {/* Intent badge */}
+        {!isUser && !message.isStreaming && message.intent && (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <span className={cx(
+              'text-[10px] font-mono px-2 py-0.5 rounded-full border',
+              message.intent === 'general_knowledge'
+                ? 'text-muted/60 border-border bg-surface'
+                : message.intent === 'tutor_mode'
+                ? 'text-amber/70 border-amber/20 bg-amber/5'
+                : 'text-muted/50 border-border/60 bg-transparent'
+            )}>
+              {message.intent === 'general_knowledge' && '✦ general knowledge'}
+              {message.intent === 'tutor_mode'        && '✦ tutor mode'}
+              {message.intent === 'fetch_paper'       && '✦ exact match'}
+              {message.intent === 'topic_search'      && '✦ topic analysis'}
+              {message.intent === 'trend_analysis'    && '✦ trend analysis'}
+              {message.intent === 'rag_search'        && '✦ semantic search'}
+            </span>
+          </div>
+        )}
+
+        {/* Sources */}
+        {!isUser && !message.isStreaming && message.sources && message.sources.length > 0 && (
+          <div className="mt-3 w-full space-y-2">
+            <p className="text-[11px] font-mono text-muted/50 uppercase tracking-widest">
+              Sources
+            </p>
+            {message.sources.map((src, i) => (
+              <SourceCard key={src.parent_id} source={src} index={i} />
+            ))}
+          </div>
+        )}
+
+        {/* Images from first source */}
         {!isUser && !message.isStreaming && message.sources && message.sources.length > 0 && (() => {
           const images = Object.entries(message.sources[0].image_urls ?? {})
           if (images.length === 0) return null
           return (
-            <div className="mt-4 flex flex-col items-center gap-2">
+            <div className="mt-3 flex flex-col items-start gap-2 w-full">
               {images.map(([label, url]) => (
                 <ExamImage key={label} url={url} label={label} />
               ))}
