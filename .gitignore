@@ -26,3 +26,5 @@ env/
 backend/core/config.py
 frontend/package-lock.json
 frontend/package.json
+backend/papersloth_memory.sqlite-shm
+backend/papersloth_memory.sqlite-wal

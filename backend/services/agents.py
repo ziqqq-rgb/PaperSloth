@@ -48,19 +48,6 @@ from core.config import settings
 from core.database import execute_query
 from services.intent import Intent, classify_with_memory
 
-# ── Tutor system prompt (also imported by retrieval.py) ──────────────────────
-
-TUTOR_SYSTEM = (
-    "You are a patient, knowledgeable university engineering tutor for UTP students. "
-    "When walking through exam questions: "
-    "(1) break down each sub-part clearly, "
-    "(2) show working steps where relevant, "
-    "(3) relate concepts back to theory when helpful, "
-    "(4) encourage the student and check understanding. "
-    "Be concise but thorough. Use markdown formatting."
-)
-
-
 # ── 1. LangGraph state ────────────────────────────────────────────────────────
 #
 # `messages`  — appended automatically by LangGraph; persisted to SQLite
@@ -74,18 +61,14 @@ TUTOR_SYSTEM = (
 # set fresh on every invocation and never need to be restored from the DB.
 
 class AgentState(TypedDict):
-    messages:  Annotated[list[AnyMessage], add_messages]
-    intent:    Any
-    body:      Any
-    svc:       Any
-    generator: Any
-
+    messages: Annotated[list[AnyMessage], add_messages]
 
 # ── 2. SQLite checkpointer (thread-safe) ─────────────────────────────────────
 #
 # sqlite3 connections are NOT safe to share across threads.  We use a
 # threading.local() so each OS thread gets its own connection.
 
+_run_ctx = threading.local()
 _local = threading.local()
 _DB_PATH = "papersloth_memory.sqlite"
 
@@ -103,50 +86,38 @@ def _get_saver() -> SqliteSaver:
 # ── 3. Graph nodes ────────────────────────────────────────────────────────────
 
 def analyze_intent_node(state: AgentState) -> dict:
-    """
-    Node 1 — inspect full message history and classify intent.
-    Returns only the `intent` key so LangGraph merges it into state.
-    """
     intent = classify_with_memory(state["messages"])
-    return {"intent": intent}
+    _run_ctx.intent = intent
+    return {}   # don't store intent in checkpointed state
 
 
 def _make_execution_node(handler_fn):
-    """
-    Wrap a handler function as a LangGraph node.
-
-    The handler receives (intent, body, svc) and returns a generator.
-    We also append a silent AIMessage to the history so that the
-    next turn's classifier knows which node was executed and with what
-    slots — this is what makes follow-up questions work.
-    """
     def node(state: AgentState) -> dict:
-        intent: Intent = state["intent"]
-        gen = handler_fn(intent, state["body"], state["svc"])
-
-        # Record execution context into message history for future turns
+        intent = _run_ctx.intent
+        body   = _run_ctx.body
+        svc    = _run_ctx.svc
+        gen = handler_fn(intent, body, svc)
+        _run_ctx.generator = gen
         memory_note = AIMessage(
             content=(
                 f"[system:executed {intent.type} "
                 f"slots={json.dumps(intent.slots)}]"
             )
         )
-        return {"generator": gen, "messages": [memory_note]}
-
+        return {"messages": [memory_note]}
     return node
 
 
 # ── 4. Build and compile the graph ───────────────────────────────────────────
 
 def _route_intent(state: AgentState) -> str:
-    """Conditional edge: map intent type to node name."""
+    intent = getattr(_run_ctx, "intent", None)
     valid = {
         "fetch_paper", "topic_search", "tutor_mode",
         "trend_analysis", "general_knowledge", "rag_search",
     }
-    intent_type = state["intent"].type if state.get("intent") else "rag_search"
+    intent_type = intent.type if intent else "rag_search"
     return intent_type if intent_type in valid else "rag_search"
-
 
 def _build_graph() -> StateGraph:
     wf = StateGraph(AgentState)
@@ -171,9 +142,6 @@ def _build_graph() -> StateGraph:
     return wf
 
 
-_workflow = _build_graph()
-
-
 # ── 5. Public entry point ─────────────────────────────────────────────────────
 
 def handle(
@@ -182,48 +150,31 @@ def handle(
     svc:       Any,
     thread_id: str,
 ) -> Generator[str, None, None]:
-    """
-    Entry point called by routers/search.py.
-
-    Parameters
-    ──────────
-    query      : raw user query string
-    body       : SearchRequest pydantic model (carries filters, top_k, etc.)
-    svc        : RetrievalService instance (from app.state)
-    thread_id  : current_user["id"] from the JWT — scopes SQLite history
-
-    Yields
-    ──────
-    SSE-formatted strings, starting with an intent event, then whatever
-    the chosen handler yields.
-    """
     config = {"configurable": {"thread_id": thread_id}}
 
+    # Store non-serializable objects in thread-local — never touches the checkpoint
+    _run_ctx.body      = body
+    _run_ctx.svc       = svc
+    _run_ctx.intent    = None
+    _run_ctx.generator = None
+
     initial_state: AgentState = {
-        "messages":  [HumanMessage(content=query)],
-        "body":      body,
-        "svc":       svc,
-        "intent":    None,
-        "generator": None,
+        "messages": [HumanMessage(content=query)],
     }
 
-    # Compile graph with a fresh per-thread checkpointer
     app = _workflow.compile(checkpointer=_get_saver())
-    final_state = app.invoke(initial_state, config=config)
+    app.invoke(initial_state, config=config)
 
-    # Emit intent event so the frontend can show the mode badge
-    intent: Optional[Intent] = final_state.get("intent")
+    intent = getattr(_run_ctx, "intent", None)
     if intent:
         yield (
             f"data: {json.dumps({'type': 'intent', 'intent': intent.type, 'slots': intent.slots})}\n\n"
         )
 
-    # Stream the generator produced by the execution node
-    gen = final_state.get("generator")
+    gen = getattr(_run_ctx, "generator", None)
     if gen:
         yield from gen
     else:
-        # Safety fallback — should never happen, but avoids a silent hang
         yield f"data: {json.dumps({'type': 'error', 'message': 'Agent produced no output.'})}\n\n"
 
 
@@ -488,6 +439,7 @@ def _trend_analysis(intent: Intent, body: Any, svc: Any) -> Generator[str, None,
         yield f"data: {json.dumps({'type': 'token', 'token': text[i:i + CHUNK]})}\n\n"
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
+_workflow = _build_graph()
 
 # ── 7. Helpers ────────────────────────────────────────────────────────────────
 
