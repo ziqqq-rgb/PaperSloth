@@ -41,6 +41,7 @@ import {
   CheckCircle2,
   Zap,
   BookMarked,
+  Download,
 } from 'lucide-react'
 import { useAuthStore } from './authStore'
 import { authApi } from './auth'
@@ -64,11 +65,14 @@ interface Message {
 
 interface Paper {
   course_code: string
+  subject_name: string
   semester: string
   year: number
   total_questions: number
   total_marks: number
   questions_with_images: number
+  has_pdf: boolean
+  file_size_kb: number
 }
 
 interface Question {
@@ -94,6 +98,12 @@ const cleanSemester = (sem: string, year: number): string => {
     .trim()
   s = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
   return `${s} ${year}`
+}
+
+const fmtSize = (kb: number): string => {
+  if (!kb) return ''
+  if (kb < 1024) return `${kb} KB`
+  return `${(kb / 1024).toFixed(1)} MB`
 }
 
 // ─── Auth Page ────────────────────────────────────────────────────────────────
@@ -431,33 +441,27 @@ function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 // ─── Exam Image ───────────────────────────────────────────────────────────────
-// Handles the loading → loaded / error lifecycle for each question image.
-// Shows a skeleton while the signed URL resolves, and a clear error state
-// instead of the browser's broken-image icon.
 
 function ExamImage({ url, label }: { url: string; label: string }) {
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading');
 
   return (
     <div className="relative flex items-center justify-center">
-      
-      {/* Loading State */}
       {status === 'loading' && (
         <div className="w-64 h-40 rounded-xl bg-border/40 border border-border animate-pulse flex items-center justify-center">
           <Loader2 size={16} className="text-muted/40 animate-spin" />
         </div>
       )}
 
-      {/* Error State - Fixed <a> and <div> structure */}
       {status === 'error' && (
         <div className="w-64 h-40 rounded-xl bg-border/30 border border-dashed border-border/60 flex flex-col items-center justify-center gap-2">
           <ImageIcon size={20} className="text-muted/30" />
           <span className="text-[10px] text-muted/40 font-mono text-center px-3">{label}</span>
-          <a 
-            href={url} 
-            target="_blank" 
-            rel="noreferrer" 
-            className="text-[10px] text-amber/60 hover:text-amber font-mono underline" 
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[10px] text-amber/60 hover:text-amber font-mono underline"
             onClick={e => e.stopPropagation()}
           >
             Open image ↗
@@ -465,21 +469,19 @@ function ExamImage({ url, label }: { url: string; label: string }) {
         </div>
       )}
 
-      {/* Image Element */}
-      <img 
-        src={url} 
-        alt={label} 
-        onLoad={() => setStatus('ok')} 
-        onError={() => setStatus('error')} 
+      <img
+        src={url}
+        alt={label}
+        onLoad={() => setStatus('ok')}
+        onError={() => setStatus('error')}
         className={cx(
           'max-w-full max-h-80 rounded-xl border border-border object-contain',
-          status !== 'ok' && 'hidden' 
-        )} 
+          status !== 'ok' && 'hidden'
+        )}
       />
     </div>
   );
 }
-
 
 // ─── Source Card ──────────────────────────────────────────────────────────────
 
@@ -541,7 +543,6 @@ function SourceCard({ source, index }: { source: Source; index: number }) {
               Full text not available
             </p>
           )}
-          
         </div>
       )}
     </div>
@@ -554,7 +555,6 @@ function MessageBubble({ message }: { message: Message }) {
 
   return (
     <div className={cx('flex gap-3 animate-slide-up', isUser && 'flex-row-reverse')}>
-      {/* Avatar */}
       <div
         className={cx(
           'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border',
@@ -568,7 +568,6 @@ function MessageBubble({ message }: { message: Message }) {
         )}
       </div>
 
-      {/* Bubble + images */}
       <div className={cx('flex-1 max-w-[85%]', isUser && 'flex flex-col items-end')}>
         <div
           className={cx(
@@ -587,7 +586,6 @@ function MessageBubble({ message }: { message: Message }) {
           )}
         </div>
 
-        {/* Images from top-ranked source only, shown after streaming completes */}
         {!isUser && !message.isStreaming && message.sources && message.sources.length > 0 && (() => {
           const images = Object.entries(message.sources[0].image_urls ?? {})
           if (images.length === 0) return null
@@ -951,7 +949,6 @@ function ChatPage() {
       {/* ── Messages ── */}
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
-          /* Empty state */
           <div className="h-full flex flex-col items-center justify-center px-6 py-12">
             <div className="w-16 h-16 rounded-2xl bg-amber/8 border border-amber/20 flex items-center justify-center mb-6">
               <Sparkles size={26} className="text-amber" />
@@ -1063,6 +1060,8 @@ function PaperDetailModal({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [downloading, setDownloading] = useState(false)
+  const [dlError, setDlError] = useState('')
 
   useEffect(() => {
     searchApi
@@ -1081,6 +1080,26 @@ function PaperDetailModal({
       return n
     })
 
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setDownloading(true)
+    setDlError('')
+    try {
+      const info = await searchApi.downloadPaper(
+        paper.course_code, paper.year, paper.semester
+      )
+      // Open signed URL in a new tab — browser handles the PDF download
+      window.open(info.url, '_blank', 'noopener,noreferrer')
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail ?? 'Download failed'
+      setDlError(detail)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   const totalImages = questions.reduce(
     (sum, q) => sum + Object.keys(q.image_urls ?? {}).length,
     0
@@ -1094,7 +1113,7 @@ function PaperDetailModal({
       <div className="bg-surface border border-border rounded-2xl w-full max-w-xl max-h-[82vh] flex flex-col animate-slide-up shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-border">
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
               <span className="font-mono text-sm font-semibold text-amber bg-amber/8 border border-amber/20 px-2 py-0.5 rounded">
                 {paper.course_code}
@@ -1103,6 +1122,9 @@ function PaperDetailModal({
                 {paper.semester} {paper.year}
               </span>
             </div>
+            {paper.subject_name && paper.subject_name !== paper.course_code && (
+              <p className="text-[12px] text-muted mb-1.5 truncate">{paper.subject_name}</p>
+            )}
             <div className="flex items-center gap-4 text-[11px] text-muted font-mono">
               <span className="flex items-center gap-1">
                 <Hash size={10} />
@@ -1120,13 +1142,46 @@ function PaperDetailModal({
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-muted hover:text-text transition-colors p-1 -mr-1 -mt-0.5"
-          >
-            <X size={17} />
-          </button>
+
+          <div className="flex items-center gap-2 ml-3 shrink-0">
+            {/* Download button — only shown when PDF exists */}
+            {paper.has_pdf && (
+              <button
+                onClick={handleDownload}
+                disabled={downloading}
+                title="Download PDF"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber/10 border border-amber/25 text-amber text-xs font-medium hover:bg-amber/20 transition-all disabled:opacity-50"
+              >
+                {downloading ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Download size={12} />
+                )}
+                PDF
+                {paper.file_size_kb > 0 && (
+                  <span className="text-amber/60 font-mono text-[10px]">
+                    {fmtSize(paper.file_size_kb)}
+                  </span>
+                )}
+              </button>
+            )}
+
+            <button
+              onClick={onClose}
+              className="text-muted hover:text-text transition-colors p-1 -mr-1 -mt-0.5"
+            >
+              <X size={17} />
+            </button>
+          </div>
         </div>
+
+        {/* Download error */}
+        {dlError && (
+          <div className="mx-5 mt-3 flex items-center gap-2 text-red-400 text-xs bg-red-400/8 border border-red-400/20 rounded-lg px-3 py-2">
+            <AlertCircle size={12} className="shrink-0" />
+            {dlError}
+          </div>
+        )}
 
         {/* Questions */}
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-2">
@@ -1215,8 +1270,9 @@ function BrowsePage() {
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState<SearchFilters>({})
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null)
-  const [subjects, setSubjects] = useState<string[]>([])
+  const [subjects, setSubjects] = useState<{ course_code: string; subject_name: string }[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const YEARS = Array.from({ length: 9 }, (_, i) => 2025 - i)
   const SEMESTERS = ['January', 'May', 'August', 'September']
@@ -1224,8 +1280,8 @@ function BrowsePage() {
   useEffect(() => {
     searchApi
       .subjects()
-      .then((data: { course_code: string }[]) =>
-        setSubjects(data.map((s) => s.course_code))
+      .then((data: { course_code: string; subject_name: string }[]) =>
+        setSubjects(data)
       )
       .catch(() => {})
   }, [])
@@ -1242,6 +1298,7 @@ function BrowsePage() {
   const filteredPapers = searchQuery
     ? papers.filter((p) =>
         p.course_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.subject_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.semester.toLowerCase().includes(searchQuery.toLowerCase()) ||
         String(p.year).includes(searchQuery)
       )
@@ -1262,6 +1319,27 @@ function BrowsePage() {
     (s, p) => s + (p.total_questions ?? 0),
     0
   )
+
+  // Download directly from the card (without opening modal)
+  const handleCardDownload = async (
+    e: React.MouseEvent,
+    paper: Paper
+  ) => {
+    e.stopPropagation()
+    const id = `${paper.course_code}-${paper.year}-${paper.semester}`
+    setDownloadingId(id)
+    try {
+      const info = await searchApi.downloadPaper(
+        paper.course_code, paper.year, paper.semester
+      )
+      window.open(info.url, '_blank', 'noopener,noreferrer')
+    } catch {
+      // fallback — open modal so user sees the error
+      setSelectedPaper(paper)
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -1293,7 +1371,7 @@ function BrowsePage() {
           </div>
 
           <select
-            className="input-base text-xs py-1.5 w-32"
+            className="input-base text-xs py-1.5 w-40"
             value={filters.course_code ?? ''}
             onChange={(e) =>
               setFilters((p) => ({
@@ -1304,8 +1382,8 @@ function BrowsePage() {
           >
             <option value="">All subjects</option>
             {subjects.map((s) => (
-              <option key={s} value={s}>
-                {s}
+              <option key={s.course_code} value={s.course_code}>
+                {s.course_code}{s.subject_name && s.subject_name !== s.course_code ? ` — ${s.subject_name}` : ''}
               </option>
             ))}
           </select>
@@ -1376,71 +1454,105 @@ function BrowsePage() {
           <div className="space-y-8">
             {Object.entries(grouped)
               .sort(([a], [b]) => a.localeCompare(b))
-              .map(([code, paperList]) => (
-                <div key={code}>
-                  {/* Subject header */}
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="font-mono text-sm font-semibold text-amber">
-                      {code}
-                    </span>
-                    <span className="text-[11px] text-muted/60">
-                      {paperList.length} paper
-                      {paperList.length !== 1 ? 's' : ''}
-                    </span>
-                    <div className="flex-1 h-px bg-border" />
-                  </div>
+              .map(([code, paperList]) => {
+                const subjectName = paperList[0]?.subject_name
+                return (
+                  <div key={code}>
+                    {/* Subject header */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="font-mono text-sm font-semibold text-amber">
+                        {code}
+                      </span>
+                      {subjectName && subjectName !== code && (
+                        <span className="text-xs text-muted/80 truncate max-w-[260px]">
+                          {subjectName}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-muted/50">
+                        {paperList.length} paper{paperList.length !== 1 ? 's' : ''}
+                      </span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
 
-                  {/* Paper cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-                    {paperList
-                      .sort(
-                        (a, b) =>
-                          b.year - a.year ||
-                          (semesterOrder[a.semester] ?? 0) -
-                            (semesterOrder[b.semester] ?? 0)
-                      )
-                      .map((p) => (
-                        <button
-                          key={`${p.course_code}-${p.year}-${p.semester}`}
-                          onClick={() => setSelectedPaper(p)}
-                          className="group card border-border/60 text-left hover:border-amber/30 hover:bg-amber/3 transition-all duration-150 space-y-2.5"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <p className="text-xs font-semibold text-text font-mono">
-                                {p.year}
-                              </p>
-                              <p className="text-[11px] text-muted">
-                                {p.semester}
-                              </p>
+                    {/* Paper cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+                      {paperList
+                        .sort(
+                          (a, b) =>
+                            b.year - a.year ||
+                            (semesterOrder[a.semester] ?? 0) -
+                              (semesterOrder[b.semester] ?? 0)
+                        )
+                        .map((p) => {
+                          const cardId = `${p.course_code}-${p.year}-${p.semester}`
+                          const isDlLoading = downloadingId === cardId
+                          return (
+                            <div
+                              key={cardId}
+                              className="group card border-border/60 hover:border-amber/30 hover:bg-amber/3 transition-all duration-150 cursor-pointer space-y-2.5"
+                              onClick={() => setSelectedPaper(p)}
+                            >
+                              {/* Year / semester row */}
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <p className="text-xs font-semibold text-text font-mono">
+                                    {p.year}
+                                  </p>
+                                  <p className="text-[11px] text-muted">
+                                    {p.semester}
+                                  </p>
+                                </div>
+                                <ChevronRight
+                                  size={12}
+                                  className="text-muted/40 group-hover:text-amber transition-colors mt-0.5"
+                                />
+                              </div>
+
+                              {/* Stats row */}
+                              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                <span className="flex items-center gap-1 text-[10px] text-muted/70 font-mono">
+                                  <Hash size={9} />
+                                  {p.total_questions}Q
+                                </span>
+                                <span className="flex items-center gap-1 text-[10px] text-muted/70 font-mono">
+                                  <Star size={9} />
+                                  {p.total_marks}m
+                                </span>
+                                {p.questions_with_images > 0 && (
+                                  <span className="flex items-center gap-1 text-[10px] text-muted/70 font-mono">
+                                    <ImageIcon size={9} />
+                                    {p.questions_with_images}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Download row — shown only when PDF is available */}
+                              {p.has_pdf && (
+                                <button
+                                  onClick={(e) => handleCardDownload(e, p)}
+                                  disabled={isDlLoading}
+                                  className="w-full flex items-center justify-center gap-1.5 py-1 rounded-md bg-amber/8 border border-amber/20 text-amber text-[10px] font-medium hover:bg-amber/15 transition-all disabled:opacity-50 mt-1"
+                                >
+                                  {isDlLoading ? (
+                                    <Loader2 size={9} className="animate-spin" />
+                                  ) : (
+                                    <Download size={9} />
+                                  )}
+                                  {isDlLoading ? 'Getting link…' : 'Download PDF'}
+                                  {p.file_size_kb > 0 && (
+                                    <span className="text-amber/50 font-mono">
+                                      {fmtSize(p.file_size_kb)}
+                                    </span>
+                                  )}
+                                </button>
+                              )}
                             </div>
-                            <ChevronRight
-                              size={12}
-                              className="text-muted/40 group-hover:text-amber transition-colors mt-0.5"
-                            />
-                          </div>
-
-                          <div className="flex flex-wrap gap-x-3 gap-y-1">
-                            <span className="flex items-center gap-1 text-[10px] text-muted/70 font-mono">
-                              <Hash size={9} />
-                              {p.total_questions}Q
-                            </span>
-                            <span className="flex items-center gap-1 text-[10px] text-muted/70 font-mono">
-                              <Star size={9} />
-                              {p.total_marks}m
-                            </span>
-                            {p.questions_with_images > 0 && (
-                              <span className="flex items-center gap-1 text-[10px] text-muted/70 font-mono">
-                                <ImageIcon size={9} />
-                                {p.questions_with_images}
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      ))}
+                          )
+                        })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
           </div>
         )}
       </div>

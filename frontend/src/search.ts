@@ -26,6 +26,14 @@ export interface SearchResult {
   cached:  boolean
 }
 
+export interface DownloadInfo {
+  url:          string
+  filename:     string
+  subject_name: string
+  file_size_kb: number
+  expires_in:   number
+}
+
 // Standard search — returns full JSON
 export const searchApi = {
   search: (query: string, filters: SearchFilters = {}): Promise<SearchResult> =>
@@ -39,6 +47,11 @@ export const searchApi = {
 
   getPaper: (courseCode: string, year: number, semester: string) =>
     api.get(`/api/papers/${courseCode}/${year}/${encodeURIComponent(semester)}`).then(r => r.data),
+
+  downloadPaper: (courseCode: string, year: number, semester: string): Promise<DownloadInfo> =>
+    api
+      .get(`/api/papers/${courseCode}/${year}/${encodeURIComponent(semester)}/download`)
+      .then(r => r.data),
 }
 
 // Streaming search — returns SSE
