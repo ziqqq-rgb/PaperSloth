@@ -54,6 +54,63 @@ import {
 } from './search'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+import ReactMarkdown from 'react-markdown'
+import type { Components } from 'react-markdown'
+
+// Define components separately so TypeScript is happy
+const markdownComponents: Components = {
+  h1: ({ children }) => (
+    <h1 className="text-base font-semibold text-text mt-4 mb-2 first:mt-0">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="text-[0.95rem] font-semibold text-text mt-3 mb-1.5 first:mt-0">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-sm font-semibold text-text mt-2.5 mb-1 first:mt-0">{children}</h3>
+  ),
+  p: ({ children }) => (
+    <p className="text-sm text-text leading-relaxed mb-2 last:mb-0">{children}</p>
+  ),
+  ul: ({ children }) => (
+    <ul className="my-1.5 space-y-0.5 list-none pl-0">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="my-1.5 space-y-0.5 list-decimal pl-5">{children}</ol>
+  ),
+  li: ({ children }) => (
+    <li className="text-sm text-text leading-relaxed flex gap-2 items-start">
+      <span className="text-amber mt-[0.35em] shrink-0 text-xs">•</span>
+      <span>{children}</span>
+    </li>
+  ),
+  strong: ({ children }) => (
+    <strong className="font-semibold text-text">{children}</strong>
+  ),
+  em: ({ children }) => (
+    <em className="italic text-muted">{children}</em>
+  ),
+  code: ({ children, className }) => {
+    const isBlock = className?.includes('language-')
+    return isBlock ? (
+      <code className={className}>{children}</code>
+    ) : (
+      <code className="font-mono text-[0.8em] text-amber bg-amber/8 border border-amber/15 px-1.5 py-0.5 rounded">
+        {children}
+      </code>
+    )
+  },
+  pre: ({ children }) => (
+    <pre className="bg-surface border border-border rounded-xl px-4 py-3 overflow-x-auto my-2 text-xs font-mono text-text">
+      {children}
+    </pre>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-2 border-amber/50 pl-3 my-2 text-muted italic">
+      {children}
+    </blockquote>
+  ),
+  hr: () => <hr className="border-border my-3" />,
+}
 
 interface Message {
   id: string
@@ -62,6 +119,16 @@ interface Message {
   sources?: Source[]
   isStreaming?: boolean
   timestamp: Date
+  intent?: string        // ← add this
+  tutorState?: {
+    course_code:     string
+    year:            number
+    semester:        string
+    question_number: string
+    sub_parts:       string[]
+    full_text:       string
+    active_part?:    string
+  }
 }
 
 interface Paper {
@@ -586,69 +653,7 @@ function MessageBubble({ message }: { message: Message }) {
         ) : (
           // Finished — full markdown render
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown
-              components={{
-                // Headings
-                h1: ({children}) => (
-                  <h1 className="text-base font-semibold text-text mt-4 mb-2 first:mt-0">{children}</h1>
-                ),
-                h2: ({children}) => (
-                  <h2 className="text-[0.95rem] font-semibold text-text mt-3 mb-1.5 first:mt-0">{children}</h2>
-                ),
-                h3: ({children}) => (
-                  <h3 className="text-sm font-semibold text-text mt-2.5 mb-1 first:mt-0">{children}</h3>
-                ),
-                // Paragraphs
-                p: ({children}) => (
-                  <p className="text-sm text-text leading-relaxed mb-2 last:mb-0">{children}</p>
-                ),
-                // Lists
-                ul: ({children}) => (
-                  <ul className="my-1.5 space-y-0.5 list-none pl-0">{children}</ul>
-                ),
-                ol: ({children}) => (
-                  <ol className="my-1.5 space-y-0.5 list-decimal pl-5">{children}</ol>
-                ),
-                li: ({children}) => (
-                  <li className="text-sm text-text leading-relaxed flex gap-2 items-start">
-                    <span className="text-amber mt-[0.35em] shrink-0 text-xs">•</span>
-                    <span>{children}</span>
-                  </li>
-                ),
-                // Bold / italic
-                strong: ({children}) => (
-                  <strong className="font-semibold text-text">{children}</strong>
-                ),
-                em: ({children}) => (
-                  <em className="italic text-muted">{children}</em>
-                ),
-                // Inline code
-                code: ({children, className}) => {
-                  const isBlock = className?.includes('language-')
-                  return isBlock ? (
-                    <code className={className}>{children}</code>
-                  ) : (
-                    <code className="font-mono text-[0.8em] text-amber bg-amber/8 border border-amber/15 px-1.5 py-0.5 rounded">
-                      {children}
-                    </code>
-                  )
-                },
-                // Code blocks
-                pre: ({children}) => (
-                  <pre className="bg-surface border border-border rounded-xl px-4 py-3 overflow-x-auto my-2 text-xs font-mono text-text">
-                    {children}
-                  </pre>
-                ),
-                // Blockquote
-                blockquote: ({children}) => (
-                  <blockquote className="border-l-2 border-amber/50 pl-3 my-2 text-muted italic">
-                    {children}
-                  </blockquote>
-                ),
-                // Horizontal rule
-                hr: () => <hr className="border-border my-3" />,
-              }}
-            >
+            <ReactMarkdown components={markdownComponents}>
               {message.content}
             </ReactMarkdown>
           </div>
