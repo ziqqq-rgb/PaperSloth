@@ -1,11 +1,3 @@
-"""
-services/retrieval.py
-─────────────────────
-Wraps the full RAG pipeline from 02_retrieval.ipynb into a class.
-Heavy objects (reranker, BM25, Pinecone) are loaded ONCE at startup
-via the lifespan hook in main.py — not per request.
-"""
-
 import json
 import pickle
 import re
@@ -18,6 +10,7 @@ import ollama
 from pinecone import Pinecone
 from sentence_transformers import CrossEncoder
 
+from services.agents import TUTOR_SYSTEM
 from core.config import settings
 from core.database import execute_query
 
@@ -30,8 +23,13 @@ class RetrievalService:
 
         # ── Gemini ───────────────────────────────────────────────────────────
         genai.configure(api_key=settings.gemini_api_key)
-        # system_instruction is a true system-role message — the model does NOT
-        # echo it back, unlike instructions embedded in the user turn.
+
+        self.flash = genai.GenerativeModel(
+
+                        settings.gemini_flash_model,
+                        system_instruction=TUTOR_SYSTEM,
+        )
+        
         self.model = genai.GenerativeModel(
             settings.gemini_model,
             system_instruction=(

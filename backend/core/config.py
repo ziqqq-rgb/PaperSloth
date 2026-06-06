@@ -19,15 +19,14 @@ class Settings(BaseSettings):
     bm25_model_path: str = "../rag pipeline/data/bm25_model.pkl"
     embed_model:     str = "nomic-embed-text-v2-moe:latest"
     gemini_model:    str = "gemma-4-31b-it"
+    gemini_flash_model: str = "gemini-3.1-flash-lite"   
     reranker_model:  str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     pinecone_index:  str = "papersloth"
 
     # Auth
     jwt_secret: str = os.getenv("JWT_SECRET_KEY")
     jwt_expire_hours: int = 24
-
-    gemini_flash_model: str = "gemini-3.1-flash-lite"   
-    gemini_model:       str = "gemma-4-31b-it" 
+    
 
     class Config:
         env_file = ".env"

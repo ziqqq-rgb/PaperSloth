@@ -6,14 +6,13 @@ import json
 from typing import Generator
 from core.database import execute_query
 
-# In RetrievalService.__init__ (or lazily in agents.py):
-self.flash = genai.GenerativeModel(
-    settings.gemini_flash_model,
-    system_instruction=TUTOR_SYSTEM,
-)
-self.model = genai.GenerativeModel(
-    settings.gemini_model,
-    system_instruction="..."  # existing
+TUTOR_SYSTEM = (
+    "You are a Socratic tutor helping a university student work through an exam question. "
+    "Never give the full answer directly. Instead: "
+    "1. Ask what the student already knows about the concept. "
+    "2. Give a hint that points toward the method, not the answer. "
+    "3. If they're stuck after 2 hints, reveal the approach step-by-step. "
+    "Keep responses concise — 3-5 sentences max per turn."
 )
 
 
@@ -169,7 +168,8 @@ def _tutor_mode(intent, body, svc):
 
     if not rows:
         # Added opening " for the f-string, escaped quotes for JSON keys, and fixed syntax
-        yield f"data: {json.dumps({'type': 'token', 'token': f'\"I couldn't find Q{qnum} in {course} {sem} {year}. Try checking the subject code or semester spelling.\"'})}\n\n"
+        msg = f"I couldn't find Q{qnum} in {course} {sem} {year}. Try checking the subject code or semester spelling."
+        yield f"data: {json.dumps({'type': 'token', 'token': msg})}\n\n"        
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
@@ -247,4 +247,40 @@ def _extract_sub_parts(full_text: str, children) -> list[str]:
         if p not in seen:
             seen.add(p)
             unique.append(p)
-    return unique or ['a']  # default to single part
+    return unique or ['a']  
+
+def _extract_course(query: str) -> str | None:
+    """
+    First try regex for explicit course codes like UPCE3273.
+    Then try a DB lookup for subject name keywords.
+    """
+    import re
+    # Try explicit code first
+    m = re.search(r'\b([A-Z]{2,4}\d{4})\b', query, re.I)
+    if m:
+        return m.group(1).upper()
+
+    # Try subject name keyword match against DB
+    keywords = re.findall(r'\b[a-zA-Z]{4,}\b', query)  # words 4+ chars
+    if not keywords:
+        return None
+
+    # Build a ILIKE search across subject_name in exam_papers
+    # Use first 3 meaningful words to avoid noise
+    search_terms = [k for k in keywords if k.lower() not in
+                    ('give', 'show', 'what', 'from', 'help', 'with',
+                     'that', 'came', 'topics', 'question', 'paper')][:3]
+    if not search_terms:
+        return None
+
+    from core.database import execute_query
+    conditions = " AND ".join([f"subject_name ILIKE %s" for _ in search_terms])
+    params = [f"%{t}%" for t in search_terms]
+
+    row = execute_query(f"""
+        SELECT course_code FROM exam_papers
+        WHERE {conditions}
+        LIMIT 1
+    """, params, fetch="one")
+
+    return row[0] if row else None

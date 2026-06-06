@@ -1,8 +1,8 @@
-# backend/services/intent.py
-
 import json
 import google.generativeai as genai
 from core.config import settings
+import re
+from dataclasses import dataclass
 
 _flash = None
 
@@ -35,11 +35,47 @@ def _llm_classify(query: str) -> dict:
     except Exception:
         return {"intent": "rag_search", "slots": {}}
     
-TUTOR_SYSTEM = (
-    "You are a Socratic tutor helping a university student work through an exam question. "
-    "Never give the full answer directly. Instead: "
-    "1. Ask what the student already knows about the concept. "
-    "2. Give a hint that points toward the method, not the answer. "
-    "3. If they're stuck after 2 hints, reveal the approach step-by-step. "
-    "Keep responses concise — 3-5 sentences max per turn."
+
+@dataclass
+class Intent:
+    type: str
+    confidence: float
+    slots: dict
+
+_FETCH = re.compile(
+    r'\b(give me|show me|get|fetch|display)\b.{0,40}\b(q\d+|question \d+)\b', re.I
 )
+_TUTOR = re.compile(
+    r'\b(help me with|explain|walk me through|i don.t understand|how do i|can you help)\b.{0,60}\b(q\d+|question \d+)\b', re.I
+)
+_TOPIC = re.compile(
+    r'\b(what topics|which topics|topics that came out|topics covered|what (came|comes) out)\b', re.I
+)
+_TREND = re.compile(
+    r'\b(trend|pattern|most common|frequently|how often|over the years)\b', re.I
+)
+_QNUM = re.compile(r'\b(q\d+|question\s*(\d+))\b', re.I)
+_YEAR = re.compile(r'\b(20\d{2})\b')
+_SEM  = re.compile(r'\b(january|may|august|september)\b', re.I)
+
+def classify(query: str) -> Intent:
+    q = query.strip()
+    slots = {}
+
+    if m := _QNUM.search(q):
+        slots['question_number'] = re.search(r'\d+', m.group()).group()
+    if m := _YEAR.search(q):
+        slots['year'] = int(m.group())
+    if m := _SEM.search(q):
+        slots['semester'] = m.group().capitalize()
+
+    if _TUTOR.search(q):
+        return Intent('tutor_mode',    0.9, slots)
+    if _FETCH.search(q):
+        return Intent('fetch_paper',   0.9, slots)
+    if _TOPIC.search(q):
+        return Intent('topic_search',  0.9, slots)
+    if _TREND.search(q):
+        return Intent('trend_analysis',0.85, slots)
+
+    return Intent('rag_search', 0.7, slots)
