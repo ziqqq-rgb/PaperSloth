@@ -1,41 +1,24 @@
-import json
-import google.generativeai as genai
-from core.config import settings
 import re
 from dataclasses import dataclass
+from typing import Optional, List
 
-_flash = None
+from pydantic import BaseModel, Field
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import AnyMessage
+from core.config import settings
 
+# ── 1. Pydantic Schemas ───────────────────────────────────────────────────────
+class IntentSlots(BaseModel):
+    course_code: Optional[str] = Field(default=None)
+    year: Optional[int] = Field(default=None)
+    semester: Optional[str] = Field(default=None)
+    question_number: Optional[str] = Field(default=None)
 
-def _get_flash():
-    global _flash
-    if _flash is None:
-        genai.configure(api_key=settings.gemini_api_key)
-        _flash = genai.GenerativeModel(
-            "gemini-2.0-flash",
-            system_instruction=(
-                "You are an intent classifier for a university exam assistant. "
-                "Classify the user query into exactly one of these intents: "
-                "fetch_paper, topic_search, tutor_mode, trend_analysis, rag_search. "
-                "Also extract any slots: course_code, year, semester, question_number. "
-                "Respond ONLY with valid JSON. No explanation."
-            )
-        )
-    return _flash
-
-
-def _llm_classify(query: str) -> dict:
-    """Fallback LLM classifier for ambiguous queries."""
-    resp = _get_flash().generate_content(
-        f"Classify this query: {query}\n\n"
-        'Respond with JSON: {"intent": "...", "slots": {"course_code": null, "year": null, "semester": null, "question_number": null}}'
-    )
-    try:
-        text = resp.text.strip().removeprefix("```json").removesuffix("```").strip()
-        return json.loads(text)
-    except Exception:
-        return {"intent": "rag_search", "slots": {}}
-    
+class IntentResult(BaseModel):
+    type: str = Field(description="fetch_paper, topic_search, tutor_mode, trend_analysis, general_knowledge, rag_search")
+    confidence: float = Field(description="Confidence score between 0.0 and 1.0")
+    slots: IntentSlots
 
 @dataclass
 class Intent:
@@ -43,46 +26,63 @@ class Intent:
     confidence: float
     slots: dict
 
-_FETCH = re.compile(
-    r'\b(give me|show me|get|fetch|display)\b.{0,40}\b(q\d+|question \d+)\b', re.I
-)
-_TUTOR = re.compile(
-    r'\b(help me with|explain|walk me through|i don.t understand|how do i|can you help)\b.{0,60}\b(q\d+|question \d+)\b', re.I
-)
-_TOPIC = re.compile(
-    r'\b(what topics|which topics|topics that came out|topics covered|what (came|comes) out)\b', re.I
-)
-_TREND = re.compile(
-    r'\b(trend|pattern|most common|frequently|how often|over the years)\b', re.I
-)
-_GENERAL = re.compile(
-    r'\b(explain|what is|what are|how does|how do|define|describe|tell me about|what does)\b',
-    re.I
-)
+# ── 2. LangChain LLM Setup ────────────────────────────────────────────────────
+_llm_classifier = None
+
+def _get_llm_classifier():
+    global _llm_classifier
+    if _llm_classifier is None:
+        llm = ChatGoogleGenerativeAI(
+            model=settings.gemini_flash_model,
+            google_api_key=settings.gemini_api_key,
+            temperature=0
+        )
+        _llm_classifier = llm.with_structured_output(IntentResult)
+    return _llm_classifier
+
+# ── 3. Regex Patterns (Unchanged) ─────────────────────────────────────────────
+_FETCH = re.compile(r'\b(give me|show me|get|fetch|display)\b.{0,40}\b(q\d+|question \d+)\b', re.I)
+_TUTOR = re.compile(r'\b(help me with|explain|walk me through|how do i)\b.{0,60}\b(q\d+|question \d+)\b', re.I)
 _QNUM = re.compile(r'\b(q\d+|question\s*(\d+))\b', re.I)
 _YEAR = re.compile(r'\b(20\d{2})\b')
 _SEM  = re.compile(r'\b(january|may|august|september)\b', re.I)
 
-def classify(query: str) -> Intent:
-    q = query.strip()
+# ── 4. Memory-Aware Router ────────────────────────────────────────────────────
+def classify_with_memory(messages: List[AnyMessage]) -> Intent:
+    """Evaluates intent using both the latest query and full SQLite chat history."""
+    
+    # Extract the exact text of the user's latest message
+    latest_query = messages[-1].content.strip()
     slots = {}
 
-    if m := _QNUM.search(q):
-        slots['question_number'] = re.search(r'\d+', m.group()).group()
-    if m := _YEAR.search(q):
-        slots['year'] = int(m.group())
-    if m := _SEM.search(q):
-        slots['semester'] = m.group().capitalize()
+    if m := _QNUM.search(latest_query): slots['question_number'] = re.search(r'\d+', m.group()).group()
+    if m := _YEAR.search(latest_query): slots['year'] = int(m.group())
+    if m := _SEM.search(latest_query): slots['semester'] = m.group().capitalize()
 
-    if _TUTOR.search(q):
-        return Intent('tutor_mode',    0.9, slots)
-    if _FETCH.search(q):
-        return Intent('fetch_paper',   0.9, slots)
-    if _TOPIC.search(q):
-        return Intent('topic_search',  0.9, slots)
-    if _TREND.search(q):
-        return Intent('trend_analysis',0.85, slots)
-    if _GENERAL.search(q):
-        return Intent('general_knowledge',0.8, slots) 
+    # If it's a brand new chat (no history) AND regex finds everything we need, return fast!
+    if len(messages) == 1:
+        if _TUTOR.search(latest_query): return Intent('tutor_mode', 0.9, slots)
+        if _FETCH.search(latest_query): return Intent('fetch_paper', 0.9, slots)
 
-    return Intent('rag_search', 0.7, slots)
+    # 🚀 If history exists (e.g. "what about part b?"), escalate to the LLM
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", 
+         "You are the intent router for the PaperSloth university exam assistant. "
+         "Analyze the user's latest query in the context of the conversation history. "
+         "Extract the intent and inherited slots. "
+         "CRITICAL: If they ask a follow-up (e.g. 'what about part b?'), you MUST inherit "
+         "the course_code, year, and question_number from the previous messages."
+        ),
+        # This injects the SQLite history directly into the prompt!
+        MessagesPlaceholder(variable_name="messages") 
+    ])
+    
+    chain = prompt | _get_llm_classifier()
+    
+    try:
+        result: IntentResult = chain.invoke({"messages": messages})
+        # Merge anything regex found with what the LLM inferred
+        final_slots = {**result.slots.model_dump(exclude_none=True), **slots}
+        return Intent(type=result.type, confidence=result.confidence, slots=final_slots)
+    except Exception:
+        return Intent("rag_search", 0.5, {})

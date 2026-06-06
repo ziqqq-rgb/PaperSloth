@@ -10,7 +10,7 @@ import ollama
 from pinecone import Pinecone
 from sentence_transformers import CrossEncoder
 
-from services.agents import TUTOR_SYSTEM
+from agents import TUTOR_SYSTEM
 from core.config import settings
 from core.database import execute_query
 

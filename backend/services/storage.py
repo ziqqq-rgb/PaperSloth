@@ -1,23 +1,3 @@
-"""
-services/storage.py
-───────────────────
-Backblaze B2 storage for exam paper PDFs.
-
-B2 is S3-compatible, so we use boto3 with a custom endpoint.
-Free tier: 10 GB storage.
-
-Add to .env:
-    B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # your region
-    B2_KEY_ID=your_application_key_id
-    B2_APP_KEY=your_application_key
-    B2_BUCKET=exam-papers
-
-Bucket layout:
-  exam-papers/
-    EDB2613/2024/MAY 2024 SEMESTER.pdf
-    RBB3013/2025/May 2025.pdf
-"""
-
 import boto3
 from botocore.config import Config
 from core.config import settings
