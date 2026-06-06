@@ -1,7 +1,3 @@
-"""
-Handler dispatch — one function per intent type.
-Each yields SSE strings, same protocol as retrieval.stream().
-"""
 import json
 from typing import Generator
 from core.database import execute_query
@@ -58,10 +54,10 @@ def _fetch_paper(intent, body, svc):
     rows = execute_query("""
         SELECT parent_id, question_number, full_text, total_marks, image_urls
         FROM   parent_chunks
-        WHERE  course_code = %s AND year = %s AND semester = %s
-          AND  question_number = %s
+        WHERE  course_code = %s AND year = %s AND semester ILIKE %s
+            AND  question_number = %s
         LIMIT 1
-    """, (course, year, sem, str(qnum)))
+    """, (course, year, f"%{sem}%", str(qnum)))
 
     if not rows:
         yield f"data: {json.dumps({'type': 'token', 'token': f'Q{qnum} not found in {course} {sem} {year}. Searching semantically…\n\n'})}\n\n"
@@ -102,7 +98,7 @@ def _topic_search(intent, body, svc):
     rows = execute_query(f"""
         SELECT question_number,
             COUNT(*)                                                              AS times,
-            array_agg(DISTINCT year || ' ' || semester)                          AS appearances,
+            array_agg(DISTINCT semester)                                     AS appearances,
             (array_agg(full_text ORDER BY year DESC, semester DESC))[1]          AS sample
         FROM   parent_chunks
         WHERE  {" AND ".join(conditions)}
@@ -118,12 +114,16 @@ def _topic_search(intent, body, svc):
     label = f"{course} " if course else ""
     label += f"{year}" if year else "all years"
 
-    lines = [f"### Topics in {label}\n"]
+    lines = [f"## Topics in {label}\n\n"]
     for r in rows:
         q, times, appearances, sample = r
-        preview = (sample or '')[:120].replace('\n', ' ')
-        appeared = ', '.join(appearances[:3])  # show max 3 recent
-        lines.append(f"**Q{q}** — appeared {times}× ({appeared})\n_{preview}…_\n")
+        preview = (sample or '')[:100].replace('\n', ' ').strip()
+            # Show max 3 semesters, cleaned up
+        appeared = ', '.join(str(a) for a in (appearances or [])[:3])
+        lines.append(
+            f"**Q{q}** — appeared **{times}×** across: {appeared}\n"
+            f"> {preview}…\n\n"
+        )
 
     text = '\n'.join(lines)
     # Stream in chunks so it feels live
@@ -161,10 +161,10 @@ def _tutor_mode(intent, body, svc):
     rows = execute_query("""
         SELECT full_text, total_marks, children
         FROM   parent_chunks
-        WHERE  course_code = %s AND year = %s AND semester = %s
-          AND  question_number = %s
+        WHERE  course_code = %s AND year = %s AND semester ILIKE %s
+            AND  question_number = %s
         LIMIT 1
-    """, (course, year, sem, str(qnum)))
+    """, (course, year, f"%{sem}%", str(qnum)))
 
     if not rows:
         # Added opening " for the f-string, escaped quotes for JSON keys, and fixed syntax
@@ -284,3 +284,49 @@ def _extract_course(query: str) -> str | None:
     """, params, fetch="one")
 
     return row[0] if row else None
+
+def handle(intent, body, svc) -> Generator[str, None, None]:
+    dispatch = {
+        'fetch_paper':       _fetch_paper,
+        'topic_search':      _topic_search,
+        'tutor_mode':        _tutor_mode,
+        'trend_analysis':    _trend_analysis,
+        'general_knowledge': _general_knowledge,  # ← new
+        'rag_search':        _rag_search,
+    }
+    handler = dispatch.get(intent.type, _rag_search)
+    yield from handler(intent, body, svc)
+
+
+def _general_knowledge(intent, body, svc):
+    """
+    Pure Gemini answer — no RAG, no Pinecone, no DB.
+    For conceptual/theory questions the model already knows.
+    """
+    import google.generativeai as genai
+    from core.config import settings
+
+    model = genai.GenerativeModel(
+        settings.gemini_flash_model,   # use flash — fast, cheap, good enough for theory
+        system_instruction=(
+            "You are a helpful university-level engineering tutor. "
+            "Answer the student's question clearly and concisely. "
+            "Use bullet points or numbered steps where appropriate. "
+            "If the question is about a specific exam paper or past year question, "
+            "say you need more context instead of guessing."
+        )
+    )
+
+    # Emit empty sources so frontend knows there are none
+    yield f"data: {json.dumps({'type': 'sources', 'sources': []})}\n\n"
+
+    full_text = ""
+    for chunk in model.generate_content(body.query, stream=True):
+        if chunk.text:
+            full_text += chunk.text
+
+    CHUNK = 40
+    for i in range(0, len(full_text), CHUNK):
+        yield f"data: {json.dumps({'type': 'token', 'token': full_text[i:i+CHUNK]})}\n\n"
+
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"

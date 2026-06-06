@@ -608,6 +608,12 @@ function MessageBubble({ message }: { message: Message }) {
             </div>
           )
         })()}
+
+        {message.intent === 'general_knowledge' && (
+          <span className="text-[10px] font-mono text-muted/50 mt-1 block">
+            ✦ general knowledge — not from past year papers
+          </span>
+        )}
       </div>
     </div>
   )
@@ -671,7 +677,14 @@ function ChatPage() {
   const abortRef = useRef(false)
 
   const YEARS = Array.from({ length: 9 }, (_, i) => 2025 - i)
-  const SEMESTERS = ['January', 'May', 'August', 'September']
+  const SEMESTERS = [
+    'January 2025',
+    'May 2025', 
+    'September 2025',
+    'January 2024',
+    'May 2024',
+    'September 2024',
+  ]
 
   useEffect(() => {
     searchApi
@@ -1294,7 +1307,14 @@ function BrowsePage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const YEARS = Array.from({ length: 9 }, (_, i) => 2025 - i)
-  const SEMESTERS = ['January', 'May', 'August', 'September']
+  const SEMESTERS = [
+    'January 2025',
+    'May 2025', 
+    'September 2025',
+    'January 2024',
+    'May 2024',
+    'September 2024',
+  ]
 
   useEffect(() => {
     searchApi

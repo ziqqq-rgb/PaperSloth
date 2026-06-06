@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 _flash = None
 
+
 def _get_flash():
     global _flash
     if _flash is None:
@@ -54,6 +55,10 @@ _TOPIC = re.compile(
 _TREND = re.compile(
     r'\b(trend|pattern|most common|frequently|how often|over the years)\b', re.I
 )
+_GENERAL = re.compile(
+    r'\b(explain|what is|what are|how does|how do|define|describe|tell me about|what does)\b',
+    re.I
+)
 _QNUM = re.compile(r'\b(q\d+|question\s*(\d+))\b', re.I)
 _YEAR = re.compile(r'\b(20\d{2})\b')
 _SEM  = re.compile(r'\b(january|may|august|september)\b', re.I)
@@ -77,5 +82,7 @@ def classify(query: str) -> Intent:
         return Intent('topic_search',  0.9, slots)
     if _TREND.search(q):
         return Intent('trend_analysis',0.85, slots)
+    if _GENERAL.search(q):
+        return Intent('general_knowledge',0.8, slots) 
 
     return Intent('rag_search', 0.7, slots)

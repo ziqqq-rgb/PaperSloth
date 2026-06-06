@@ -91,7 +91,7 @@ class RetrievalService:
         f = {}
         if course_code:   f["course_code"]   = {"$eq": course_code}
         if year:          f["year"]           = {"$eq": year}
-        if semester:      f["semester"]       = {"$eq": semester}
+        if semester:      f["semester"]       = {"$eq": semester}  # Pinecone filter unchanged
         if question_type: f["question_type"]  = {"$eq": question_type}
         if min_marks:     f["marks"]          = {"$gte": min_marks}
         return f
