@@ -1,30 +1,39 @@
 """
 services/storage.py
 ───────────────────
-Supabase Storage helpers for exam PDF management.
+Backblaze B2 storage for exam paper PDFs.
+
+B2 is S3-compatible, so we use boto3 with a custom endpoint.
+Free tier: 10 GB storage.
+
+Add to .env:
+    B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com   # your region
+    B2_KEY_ID=your_application_key_id
+    B2_APP_KEY=your_application_key
+    B2_BUCKET=exam-papers
 
 Bucket layout:
   exam-papers/
     EDB2613/2024/MAY 2024 SEMESTER.pdf
-    EDB2613/2023/JANUARY 2023 SEMESTER.pdf
     RBB3013/2025/May 2025.pdf
-    ...
-
-Signed URLs expire after 1 hour — the frontend opens them in a new tab
-immediately, so expiry is never an issue in normal use.
 """
 
-import requests
+import boto3
+from botocore.config import Config
 from core.config import settings
 
-BUCKET = "exam-papers"
+BUCKET = settings.b2_bucket
 
 
-def _headers() -> dict:
-    return {
-        "apikey":        settings.supabase_key,
-        "Authorization": f"Bearer {settings.supabase_key}",
-    }
+def _client():
+    """Create a B2 client (S3-compatible)."""
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.b2_endpoint,
+        aws_access_key_id=settings.b2_key_id,
+        aws_secret_access_key=settings.b2_app_key,
+        config=Config(signature_version="s3v4"),
+    )
 
 
 def pdf_path(course_code: str, year: int, semester: str) -> str:
@@ -34,37 +43,31 @@ def pdf_path(course_code: str, year: int, semester: str) -> str:
 
 def create_signed_url(path: str, expires_in: int = 3600) -> str:
     """
-    Request a time-limited signed download URL from Supabase Storage.
-    expires_in: seconds until the URL expires (default 1 h)
+    Generate a pre-signed download URL (expires in 1 hour by default).
+    The frontend opens this directly — no proxying through the API.
     """
-    url = f"{settings.supabase_url}/storage/v1/object/sign/{BUCKET}/{path}"
-    resp = requests.post(
-        url,
-        json={"expiresIn": expires_in},
-        headers=_headers(),
-        timeout=10,
+    url = _client().generate_presigned_url(
+        "get_object",
+        Params={"Bucket": BUCKET, "Key": path},
+        ExpiresIn=expires_in,
     )
-    if resp.status_code != 200:
-        raise RuntimeError(
-            f"Supabase sign failed [{resp.status_code}]: {resp.text}"
-        )
-    data = resp.json()
-    signed = data.get("signedURL") or data.get("signedUrl", "")
-    # Supabase sometimes returns a path-only value; prepend the base URL.
-    if signed and not signed.startswith("http"):
-        signed = f"{settings.supabase_url}/storage/v1{signed}"
-    return signed
+    return url
 
 
 def upload_pdf(path: str, content: bytes, content_type: str = "application/pdf") -> str:
     """
-    Upload a PDF to the exam-papers bucket.
+    Upload a PDF to B2.
     Returns the storage path on success, raises on failure.
-    Used by admin tooling / ingestion scripts.
     """
-    url = f"{settings.supabase_url}/storage/v1/object/{BUCKET}/{path}"
-    headers = {**_headers(), "Content-Type": content_type}
-    resp = requests.post(url, data=content, headers=headers, timeout=60)
-    if resp.status_code not in (200, 201):
-        raise RuntimeError(f"Upload failed [{resp.status_code}]: {resp.text}")
+    _client().put_object(
+        Bucket=BUCKET,
+        Key=path,
+        Body=content,
+        ContentType=content_type,
+    )
     return path
+
+
+def delete_pdf(path: str) -> None:
+    """Remove a PDF from B2 (admin use)."""
+    _client().delete_object(Bucket=BUCKET, Key=path)

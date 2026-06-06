@@ -15,18 +15,23 @@ class Settings(BaseSettings):
     database_url: str = os.getenv("DATABASE_URL")
     redis_url: str = os.getenv("REDIS_URL")
 
+    # Backblaze B2 (PDF storage)
+    b2_endpoint: str = os.getenv("B2_ENDPOINT", "")
+    b2_key_id:   str = os.getenv("B2_KEY_ID", "")
+    b2_app_key:  str = os.getenv("B2_APP_KEY", "")
+    b2_bucket:   str = os.getenv("B2_BUCKET", "exam-papers")
+
     # Models
     bm25_model_path: str = "../rag pipeline/data/bm25_model.pkl"
     embed_model:     str = "nomic-embed-text-v2-moe:latest"
     gemini_model:    str = "gemma-4-31b-it"
-    gemini_flash_model: str = "gemini-3.1-flash-lite"   
+    gemini_flash_model: str = "gemini-3.1-flash-lite"
     reranker_model:  str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     pinecone_index:  str = "papersloth"
 
     # Auth
     jwt_secret: str = os.getenv("JWT_SECRET_KEY")
     jwt_expire_hours: int = 24
-    
 
     class Config:
         env_file = ".env"

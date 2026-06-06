@@ -1,1 +1,5 @@
 config.py
+/papers.csv
+/papers
+/core/config.py
+batch_upload.py

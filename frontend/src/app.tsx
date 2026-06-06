@@ -5,6 +5,7 @@ import React, {
   useCallback,
   Fragment,
 } from 'react'
+import BrowsePage from './BrowsePage'
 import {
   BrowserRouter,
   Routes,
@@ -51,7 +52,6 @@ import {
   type SearchFilters,
   type Source,
 } from './search'
-import ReactMarkdown from 'react-markdown'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,16 +62,6 @@ interface Message {
   sources?: Source[]
   isStreaming?: boolean
   timestamp: Date
-  intent?:     string
-  tutorState?: {
-    course_code:     string
-    year:            number
-    semester:        string
-    question_number: string
-    sub_parts:       string[]
-    full_text:       string
-    active_part?:    string
-  }
 }
 
 interface Paper {
@@ -580,22 +570,22 @@ function MessageBubble({ message }: { message: Message }) {
       </div>
 
       <div className={cx('flex-1 max-w-[85%]', isUser && 'flex flex-col items-end')}>
-        {message.isStreaming
-          ? <div className="whitespace-pre-wrap">{message.content}<span className="animate-blink ..."/></div>
-          : <ReactMarkdown
-              className="prose prose-invert prose-sm max-w-none"
-                components={{
-                  p: ({children}) => <p className="mb-2 last:mb-0 text-sm leading-relaxed">{children}</p>,
-                  strong: ({children}) => <strong className="text-text font-semibold">{children}</strong>,
-                  li: ({children}) => <li className="ml-4 text-sm list-disc text-text">{children}</li>,
-                  ul: ({children}) => <ul className="mb-2 space-y-0.5">{children}</ul>,
-                  ol: ({children}) => <ol className="mb-2 space-y-0.5 list-decimal ml-4">{children}</ol>,
-                  code: ({children}) => <code className="font-mono text-xs bg-border/40 px-1 py-0.5 rounded text-amber">{children}</code>,
-                }}
-              >
+        <div
+          className={cx(
+            'rounded-xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap',
+            isUser
+              ? 'bg-amber/8 border border-amber/20 text-text'
+              : 'bg-surface border border-border text-text'
+          )}
+        >
           {message.content}
-        </ReactMarkdown>
-}
+          {message.isStreaming && (
+            <span className="inline-block w-[3px] h-[1em] bg-amber animate-blink rounded-sm ml-0.5 align-middle" />
+          )}
+          {!message.content && !message.isStreaming && (
+            <span className="text-muted/50 italic text-xs">No response</span>
+          )}
+        </div>
 
         {!isUser && !message.isStreaming && message.sources && message.sources.length > 0 && (() => {
           const images = Object.entries(message.sources[0].image_urls ?? {})
@@ -608,12 +598,6 @@ function MessageBubble({ message }: { message: Message }) {
             </div>
           )
         })()}
-
-        {message.intent === 'general_knowledge' && (
-          <span className="text-[10px] font-mono text-muted/50 mt-1 block">
-            ✦ general knowledge — not from past year papers
-          </span>
-        )}
       </div>
     </div>
   )
@@ -677,14 +661,7 @@ function ChatPage() {
   const abortRef = useRef(false)
 
   const YEARS = Array.from({ length: 9 }, (_, i) => 2025 - i)
-  const SEMESTERS = [
-    'January 2025',
-    'May 2025', 
-    'September 2025',
-    'January 2024',
-    'May 2024',
-    'September 2024',
-  ]
+  const SEMESTERS = ['January', 'May', 'August', 'September']
 
   useEffect(() => {
     searchApi
@@ -761,18 +738,10 @@ function ChatPage() {
               )
             )
             setIsStreaming(false)
-          } else if (event.type === 'intent') {
-                setMessages(prev => prev.map(m =>
-                  m.id === aiMsgId ? { ...m, intent: event.intent } : m
-            ))
-          } else if (event.type === 'tutor_start') {
-                setMessages(prev => prev.map(m =>
-                  m.id === aiMsgId ? { ...m, tutorState: { ...event, active_part: undefined } } : m
-            ))
           }
         }
       } catch {
-        setMessages((prev) => 
+        setMessages((prev) =>
           prev.map((m) =>
             m.id === aiMsgId
               ? {
@@ -1295,9 +1264,9 @@ function PaperDetailModal({
   )
 }
 
-// ─── Browse Page ──────────────────────────────────────────────────────────────
+// ─── Browse Page — see BrowsePage.tsx ────────────────────────────────────────
 
-function BrowsePage() {
+function _BrowsePageUnused() {
   const [papers, setPapers] = useState<Paper[]>([])
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState<SearchFilters>({})
@@ -1307,14 +1276,7 @@ function BrowsePage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const YEARS = Array.from({ length: 9 }, (_, i) => 2025 - i)
-  const SEMESTERS = [
-    'January 2025',
-    'May 2025', 
-    'September 2025',
-    'January 2024',
-    'May 2024',
-    'September 2024',
-  ]
+  const SEMESTERS = ['January', 'May', 'August', 'September']
 
   useEffect(() => {
     searchApi
