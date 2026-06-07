@@ -55,67 +55,6 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-import ReactMarkdown from 'react-markdown'
-import remarkMath from 'remark-math'
-import rehypeKatex from 'rehype-katex'
-import 'katex/dist/katex.min.css'
-import type { Components } from 'react-markdown'
-
-// Define components separately so TypeScript is happy
-const markdownComponents: Components = {
-  h1: ({ children }) => (
-    <h1 className="text-base font-semibold text-text mt-4 mb-2 first:mt-0">{children}</h1>
-  ),
-  h2: ({ children }) => (
-    <h2 className="text-[0.95rem] font-semibold text-text mt-3 mb-1.5 first:mt-0">{children}</h2>
-  ),
-  h3: ({ children }) => (
-    <h3 className="text-sm font-semibold text-text mt-2.5 mb-1 first:mt-0">{children}</h3>
-  ),
-  p: ({ children }) => (
-    <p className="text-sm text-text leading-relaxed mb-2 last:mb-0">{children}</p>
-  ),
-  ul: ({ children }) => (
-    <ul className="my-1.5 space-y-0.5 list-none pl-0">{children}</ul>
-  ),
-  ol: ({ children }) => (
-    <ol className="my-1.5 space-y-0.5 list-decimal pl-5">{children}</ol>
-  ),
-  li: ({ children }) => (
-    <li className="text-sm text-text leading-relaxed flex gap-2 items-start">
-      <span className="text-amber mt-[0.35em] shrink-0 text-xs">•</span>
-      <span>{children}</span>
-    </li>
-  ),
-  strong: ({ children }) => (
-    <strong className="font-semibold text-text">{children}</strong>
-  ),
-  em: ({ children }) => (
-    <em className="italic text-muted">{children}</em>
-  ),
-  code: ({ children, className }) => {
-    const isBlock = className?.includes('language-')
-    return isBlock ? (
-      <code className={className}>{children}</code>
-    ) : (
-      <code className="font-mono text-[0.8em] text-amber bg-amber/8 border border-amber/15 px-1.5 py-0.5 rounded">
-        {children}
-      </code>
-    )
-  },
-  pre: ({ children }) => (
-    <pre className="bg-surface border border-border rounded-xl px-4 py-3 overflow-x-auto my-2 text-xs font-mono text-text">
-      {children}
-    </pre>
-  ),
-  blockquote: ({ children }) => (
-    <blockquote className="border-l-2 border-amber/50 pl-3 my-2 text-muted italic">
-      {children}
-    </blockquote>
-  ),
-  hr: () => <hr className="border-border my-3" />,
-}
-
 interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -123,16 +62,6 @@ interface Message {
   sources?: Source[]
   isStreaming?: boolean
   timestamp: Date
-  intent?: string        // ← add this
-  tutorState?: {
-    course_code:     string
-    year:            number
-    semester:        string
-    question_number: string
-    sub_parts:       string[]
-    full_text:       string
-    active_part?:    string
-  }
 }
 
 interface Paper {
@@ -627,85 +556,42 @@ function MessageBubble({ message }: { message: Message }) {
 
   return (
     <div className={cx('flex gap-3 animate-slide-up', isUser && 'flex-row-reverse')}>
-      {/* Avatar */}
-      <div className={cx(
-        'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border',
-        isUser
-          ? 'bg-border/60 border-border'
-          : 'bg-amber/8 border-amber/20'
-      )}>
-        {isUser
-          ? <span className="text-[10px] text-muted font-mono font-semibold">you</span>
-          : <Sparkles size={13} className="text-amber" />
-        }
+      <div
+        className={cx(
+          'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border',
+          isUser ? 'bg-border/60 border-border' : 'bg-amber/8 border-amber/20'
+        )}
+      >
+        {isUser ? (
+          <span className="text-[10px] text-muted font-mono font-semibold">you</span>
+        ) : (
+          <Sparkles size={13} className="text-amber" />
+        )}
       </div>
 
-      {/* Bubble */}
       <div className={cx('flex-1 max-w-[85%]', isUser && 'flex flex-col items-end')}>
+        <div
+          className={cx(
+            'rounded-xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap',
+            isUser
+              ? 'bg-amber/8 border border-amber/20 text-text'
+              : 'bg-surface border border-border text-text'
+          )}
+        >
+          {message.content}
+          {message.isStreaming && (
+            <span className="inline-block w-[3px] h-[1em] bg-amber animate-blink rounded-sm ml-0.5 align-middle" />
+          )}
+          {!message.content && !message.isStreaming && (
+            <span className="text-muted/50 italic text-xs">No response</span>
+          )}
+        </div>
 
-        {isUser ? (
-          // User messages — plain text, pill style
-          <div className="bg-surface border border-border rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm text-text leading-relaxed">
-            {message.content}
-          </div>
-        ) : message.isStreaming ? (
-          // Streaming — raw text with blinking cursor, no markdown parse mid-stream
-          <div className="text-sm text-text leading-relaxed whitespace-pre-wrap">
-            {message.content}
-            <span className="inline-block w-[2px] h-[1em] bg-amber ml-0.5 animate-blink align-middle" />
-          </div>
-        ) : (
-          // Finished — full markdown render
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown
-              components={markdownComponents}
-              remarkPlugins={[remarkMath]}
-              rehypePlugins={[rehypeKatex]}
-            >
-              {message.content}
-            </ReactMarkdown>
-          </div>
-        )}
-
-        {/* Intent badge */}
-        {!isUser && !message.isStreaming && message.intent && (
-          <div className="mt-1.5 flex items-center gap-1.5">
-            <span className={cx(
-              'text-[10px] font-mono px-2 py-0.5 rounded-full border',
-              message.intent === 'general_knowledge'
-                ? 'text-muted/60 border-border bg-surface'
-                : message.intent === 'tutor_mode'
-                ? 'text-amber/70 border-amber/20 bg-amber/5'
-                : 'text-muted/50 border-border/60 bg-transparent'
-            )}>
-              {message.intent === 'general_knowledge' && '✦ general knowledge'}
-              {message.intent === 'tutor_mode'        && '✦ tutor mode'}
-              {message.intent === 'fetch_paper'       && '✦ exact match'}
-              {message.intent === 'topic_search'      && '✦ topic analysis'}
-              {message.intent === 'trend_analysis'    && '✦ trend analysis'}
-              {message.intent === 'rag_search'        && '✦ semantic search'}
-            </span>
-          </div>
-        )}
-
-        {/* Sources */}
-        {!isUser && !message.isStreaming && message.sources && message.sources.length > 0 && (
-          <div className="mt-3 w-full space-y-2">
-            <p className="text-[11px] font-mono text-muted/50 uppercase tracking-widest">
-              Sources
-            </p>
-            {message.sources.map((src, i) => (
-              <SourceCard key={src.parent_id} source={src} index={i} />
-            ))}
-          </div>
-        )}
-
-        {/* Images from first source */}
         {!isUser && !message.isStreaming && message.sources && message.sources.length > 0 && (() => {
           const images = Object.entries(message.sources[0].image_urls ?? {})
           if (images.length === 0) return null
           return (
-            <div className="mt-3 flex flex-col items-start gap-2 w-full">
+            <div className="mt-4 flex flex-col items-center gap-2">
               {images.map(([label, url]) => (
                 <ExamImage key={label} url={url} label={label} />
               ))}
@@ -1064,35 +950,13 @@ function ChatPage() {
       {/* ── Messages ── */}
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center px-6 py-12">
+          <div className="h-full flex flex-col items-center justify-center px-6">
             <div className="w-16 h-16 rounded-2xl bg-amber/8 border border-amber/20 flex items-center justify-center mb-6">
               <Sparkles size={26} className="text-amber" />
             </div>
-            <h2 className="font-display text-[2rem] text-text mb-2 text-center">
+            <h2 className="font-display text-[2rem] text-text text-center">
               What do you want to study?
             </h2>
-            <p className="text-muted text-sm text-center max-w-md mb-10 leading-relaxed">
-              Ask about any topic, concept, or question type. PaperSloth searches
-              across all UTP past year papers semantically.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-2xl">
-              {SUGGESTIONS.map(({ icon: Icon, text }) => (
-                <button
-                  key={text}
-                  onClick={() => send(text)}
-                  className="group flex items-start gap-3 text-left p-3.5 rounded-xl border border-border bg-surface hover:border-amber/25 hover:bg-amber/4 transition-all duration-150"
-                >
-                  <Icon
-                    size={14}
-                    className="text-muted/60 group-hover:text-amber shrink-0 mt-0.5 transition-colors"
-                  />
-                  <span className="text-sm text-muted group-hover:text-text leading-snug transition-colors">
-                    {text}
-                  </span>
-                </button>
-              ))}
-            </div>
           </div>
         ) : (
           <div className="max-w-3xl mx-auto px-5 py-6 space-y-6">
