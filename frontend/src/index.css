@@ -34,4 +34,35 @@
   .card {
     @apply bg-surface border border-border rounded-xl p-4;
   }
+  /* KaTeX dark mode fixes */
+  .katex {
+    color: var(--color-text, #e6edf3);
+    font-size: 1em;
+  }
+
+  .katex-display {
+    @apply my-3 overflow-x-auto;
+    color: #e6edf3;
+  }
+
+  .katex-display > .katex {
+    color: #e6edf3;
+  }
+
+  /* Inline math styling */
+  .katex .mord,
+  .katex .mbin,
+  .katex .mrel,
+  .katex .mopen,
+  .katex .mclose,
+  .katex .mpunct,
+  .katex .minner {
+    color: #e6edf3;
+  }
+
+  /* Math accent color */
+  .katex .mord.text {
+    color: #e6edf3;
+  }
 }
+

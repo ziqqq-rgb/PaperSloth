@@ -54,7 +54,11 @@ import {
 } from './search'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
 import ReactMarkdown from 'react-markdown'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import type { Components } from 'react-markdown'
 
 // Define components separately so TypeScript is happy
@@ -653,7 +657,11 @@ function MessageBubble({ message }: { message: Message }) {
         ) : (
           // Finished — full markdown render
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown components={markdownComponents}>
+            <ReactMarkdown
+              components={markdownComponents}
+              remarkPlugins={[remarkMath]}
+              rehypePlugins={[rehypeKatex]}
+            >
               {message.content}
             </ReactMarkdown>
           </div>

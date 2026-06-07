@@ -29,6 +29,7 @@ class IntentSlots(BaseModel):
     year:            Optional[int] = Field(default=None)
     semester:        Optional[str] = Field(default=None)
     question_number: Optional[str] = Field(default=None)
+    sub_part:        Optional[str] = Field(default=None)
 
 
 class IntentResult(BaseModel):
@@ -70,7 +71,7 @@ _GENERAL = re.compile(
     r'\b(what is|explain|define|how does|why does|what are)\b', re.I
 )
 
-_QNUM = re.compile(r'\b(q\d+|question\s*(\d+))\b', re.I)
+_QNUM = re.compile(r'\b(?:q(?:uestion\s*)?(\d+)([a-z])?)\b', re.I)
 _YEAR = re.compile(r'\b(20\d{2})\b')
 _SEM  = re.compile(r'\b(january|may|august|september)\b', re.I)
 
@@ -80,7 +81,9 @@ _SEM  = re.compile(r'\b(january|may|august|september)\b', re.I)
 def _extract_slots(text: str) -> dict:
     slots: dict = {}
     if m := _QNUM.search(text):
-        slots["question_number"] = re.search(r"\d+", m.group()).group()  # type: ignore[union-attr]
+        slots["question_number"] = m.group(1)          # just the digit e.g. "2"
+        if m.group(2):
+            slots["sub_part"] = m.group(2).lower()     # e.g. "a"
     if m := _YEAR.search(text):
         slots["year"] = int(m.group())
     if m := _SEM.search(text):
@@ -146,16 +149,16 @@ _MEMORY_PROMPT = ChatPromptTemplate.from_messages([
         "You are the intent router for the PaperSloth university exam assistant. "
         "Analyse the user's latest query in the context of the full conversation history. "
         "CRITICAL RULES:\n"
-        "1. If the user asks a follow-up (e.g. 'what about part b?', 'and Q3?'), "
+        "1. If the user asks a follow-up (e.g. 'what about part b?', 'help me with 2a', 'and Q3?'), "
         "you MUST inherit course_code, year, semester, and question_number from "
         "previous messages where they were stated.\n"
-        "2. Prefer tutor_mode when the user wants step-by-step help with a specific question.\n"
-        "3. Use rag_search as the default when nothing else fits.\n"
+        "2. question_number is ONLY the digit (e.g. '2' not '2a'). Sub-part letters (a/b/c) go in sub_part.\n"
+        "3. Prefer tutor_mode when the user wants step-by-step help with a specific question.\n"
+        "4. Use rag_search as the default when nothing else fits.\n"
         "Return structured JSON only.",
     ),
     MessagesPlaceholder(variable_name="messages"),
 ])
-
 
 def classify_with_memory(messages: List[AnyMessage]) -> Intent:
     """

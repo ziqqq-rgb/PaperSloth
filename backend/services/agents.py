@@ -201,8 +201,15 @@ def _general_knowledge(intent: Intent, body: Any, svc: Any) -> Generator[str, No
 
     full_text = ""
     for chunk in llm.stream([sys_msg, HumanMessage(content=body.query)]):
-        if chunk.content:
-            full_text += chunk.content
+        content = chunk.content
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict):
+                    full_text += block.get("text", "")
+                elif isinstance(block, str):
+                    full_text += block
+        elif isinstance(content, str) and content:
+            full_text += content
 
     CHUNK = 40
     for i in range(0, len(full_text), CHUNK):
@@ -337,16 +344,17 @@ def _topic_search(intent: Intent, body: Any, svc: Any) -> Generator[str, None, N
 
 
 def _tutor_mode(intent: Intent, body: Any, svc: Any) -> Generator[str, None, None]:
-    slots  = intent.slots
-    course = body.course_code or slots.get("course_code") or _extract_course(body.query)
-    year   = body.year        or slots.get("year")
-    sem    = body.semester    or slots.get("semester")
-    qnum   = slots.get("question_number")
+    slots    = intent.slots
+    course   = body.course_code or slots.get("course_code") or _extract_course(body.query)
+    year     = body.year        or slots.get("year")
+    sem      = body.semester    or slots.get("semester")
+    qnum     = slots.get("question_number")
+    sub_part = slots.get("sub_part")
 
     if not (course and year and sem and qnum):
         missing_parts = (
-            ("" if course else "- Which subject? (e.g. `UPCE3273`)\n")
-            + ("" if year   else "- Which year? (e.g. `2024`)\n")
+            ("" if course else "- Which subject? (e.g. `RBB3013`)\n")
+            + ("" if year   else "- Which year? (e.g. `2025`)\n")
             + ("" if sem    else "- Which semester? (e.g. `May`)\n")
             + ("" if qnum   else "- Which question number? (e.g. `Q2`)\n")
         )
@@ -376,23 +384,96 @@ def _tutor_mode(intent: Intent, body: Any, svc: Any) -> Generator[str, None, Non
         return
 
     full_text, marks, children = rows[0]
-    sub_parts  = _extract_sub_parts(full_text, children)
-    parts_list = "\n".join(f"- Part **({p})**" for p in sub_parts) if sub_parts else ""
+    sub_parts = _extract_sub_parts(full_text, children)
 
-    greeting = (
-        f"Sure! Let's work through **Q{qnum}** from {course} {sem} {year} "
-        f"({marks} marks).\n\n"
-        f"This question has {len(sub_parts)} part{'s' if len(sub_parts) != 1 else ''}:\n"
-        f"{parts_list}\n\n"
-        "Which part would you like to start with — or shall we go through them in order?"
-    )
-
+    # Emit tutor_start so frontend knows context
     yield (
         f"data: {json.dumps({'type': 'tutor_start', 'question_number': qnum, 'course_code': course, 'year': year, 'semester': sem, 'sub_parts': sub_parts, 'full_text': full_text})}\n\n"
     )
+
+    # Build the prompt for the LLM to actually solve/explain
+    if sub_part:
+        # Extract the specific sub-part text
+        pattern = re.compile(
+            rf'\({re.escape(sub_part)}\)(.*?)(?=\s*\([a-z]\)\s|\Z)',
+            re.DOTALL | re.IGNORECASE
+        )
+        match = pattern.search(full_text)
+        sub_text = match.group(1).strip() if match else full_text
+
+        user_prompt = (
+            f"Here is exam question Q{qnum} from {course} {sem} {year}:\n\n"
+            f"{full_text}\n\n"
+            f"The student wants help with part ({sub_part}):\n\n"
+            f"{sub_text}\n\n"
+            f"Please solve and explain part ({sub_part}) step by step. "
+            f"Show all working clearly."
+        )
+    else:
+        # Determine what user actually wants — solve all or just orient?
+        wants_solution = any(w in body.query.lower() for w in [
+            'solve', 'answer', 'explain', 'calculate', 'work through',
+            'in order', 'just start', 'start', 'go through', 'all'
+        ])
+
+        if wants_solution:
+            user_prompt = (
+                f"Here is exam question Q{qnum} from {course} {sem} {year} ({marks} marks):\n\n"
+                f"{full_text}\n\n"
+                f"Please solve and explain ALL parts of this question step by step. "
+                f"Label each part clearly (a), (b), (c) etc. Show all working."
+            )
+        else:
+            # Just orient: show parts and ask which to start with
+            parts_list = "\n".join(f"- Part **({p})**" for p in sub_parts) if sub_parts else ""
+            greeting = (
+                f"Sure! Let's work through **Q{qnum}** from {course} {sem} {year} ({marks} marks).\n\n"
+            )
+            if sub_parts:
+                greeting += (
+                    f"This question has {len(sub_parts)} parts:\n{parts_list}\n\n"
+                    "Which part would you like to start with — or say **'solve all'** to go through them in order?"
+                )
+            else:
+                greeting += f"Here's the question:\n\n> {full_text}\n\nShall I solve it?"
+            CHUNK = 40
+            for i in range(0, len(greeting), CHUNK):
+                yield f"data: {json.dumps({'type': 'token', 'token': greeting[i:i+CHUNK]})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+    # Call LLM to actually solve it
+    llm = ChatGoogleGenerativeAI(
+        model=settings.gemini_flash_model,
+        google_api_key=settings.gemini_api_key,
+        temperature=0.1,
+    )
+    sys_msg = SystemMessage(content=(
+        "You are a patient, knowledgeable university engineering tutor for UTP students. "
+        "When solving exam questions: "
+        "(1) Break down each part clearly with its label. "
+        "(2) Show all working steps. "
+        "(3) State relevant formulas before using them. "
+        "(4) Give the final answer clearly. "
+        "Use markdown formatting."
+    ))
+
+    full_response = ""
+    for chunk in llm.stream([sys_msg, HumanMessage(content=user_prompt)]):
+        content = chunk.content
+        if isinstance(content, list):
+            # content is a list of blocks e.g. [{"type": "text", "text": "..."}]
+            for block in content:
+                if isinstance(block, dict):
+                    full_response += block.get("text", "")
+                elif isinstance(block, str):
+                    full_response += block
+        elif isinstance(content, str) and content:
+            full_response += content
+
     CHUNK = 40
-    for i in range(0, len(greeting), CHUNK):
-        yield f"data: {json.dumps({'type': 'token', 'token': greeting[i:i + CHUNK]})}\n\n"
+    for i in range(0, len(full_response), CHUNK):
+        yield f"data: {json.dumps({'type': 'token', 'token': full_response[i:i+CHUNK]})}\n\n"
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
@@ -445,15 +526,16 @@ _workflow = _build_graph()
 
 def _extract_sub_parts(full_text: str, children: Any) -> list[str]:
     if children and isinstance(children, list) and len(children) > 1:
-        return [str(i + 1) for i in range(len(children))]
-    parts  = re.findall(r"\(([a-z]+)\)", full_text[:800])
+        return [str(chr(97 + i)) for i in range(len(children))]
+    # Only match (a), (b), (c) style — NOT (1), (2), (3)
+    parts = re.findall(r'\(([a-z])\)', full_text[:800])
     seen: set = set()
     unique: list[str] = []
     for p in parts:
         if p not in seen:
             seen.add(p)
             unique.append(p)
-    return unique or ["a"]
+    return unique or []
 
 
 def _extract_course(query: str) -> Optional[str]:
