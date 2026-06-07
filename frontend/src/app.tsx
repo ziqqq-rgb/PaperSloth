@@ -222,9 +222,7 @@ function AuthPage() {
         <div className="w-full max-w-[360px]">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 mb-10">
-            <div className="w-8 h-8 rounded-lg bg-amber flex items-center justify-center">
               <img src={logo} alt="PaperSloth" className="w-14 h-14 rounded-lg object-contain" />
-            </div>
             <span className="font-display text-xl text-text">PaperSloth</span>
           </div>
 
@@ -349,9 +347,8 @@ function Sidebar() {
           collapsed ? 'justify-center' : 'gap-2.5'
         )}
       >
-        <div className="w-14 h-14 rounded-lg bg-amber flex items-center justify-center shrink-0">
           <img src={logo} alt="PaperSloth" className="w-14 h-14 rounded-lg object-contain" />
-        </div>
+        
         {!collapsed && (
           <span className="font-display text-[1.1rem] text-text leading-none">
             PaperSloth
