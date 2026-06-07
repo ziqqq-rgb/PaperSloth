@@ -56,6 +56,8 @@ import {
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
+import logo from './assets/logo.svg'
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Message {
@@ -171,9 +173,7 @@ function AuthPage() {
       {/* ── Left branding panel ── */}
       <div className="hidden lg:flex lg:w-[52%] bg-surface border-r border-border flex-col">
         <div className="flex items-center gap-3 px-10 pt-10">
-          <div className="w-9 h-9 rounded-xl bg-amber flex items-center justify-center">
-            <BookOpen size={17} className="text-base" strokeWidth={2.5} />
-          </div>
+            <img src={logo} alt="PaperSloth" className="w-14 h-14 object-contain" />
           <span className="font-display text-xl text-text tracking-tight">
             PaperSloth
           </span>
@@ -223,7 +223,7 @@ function AuthPage() {
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 mb-10">
             <div className="w-8 h-8 rounded-lg bg-amber flex items-center justify-center">
-              <BookOpen size={15} className="text-base" strokeWidth={2.5} />
+              <img src={logo} alt="PaperSloth" className="w-14 h-14 rounded-lg object-contain" />
             </div>
             <span className="font-display text-xl text-text">PaperSloth</span>
           </div>
@@ -349,8 +349,8 @@ function Sidebar() {
           collapsed ? 'justify-center' : 'gap-2.5'
         )}
       >
-        <div className="w-7 h-7 rounded-lg bg-amber flex items-center justify-center shrink-0">
-          <BookOpen size={13} className="text-base" strokeWidth={2.5} />
+        <div className="w-14 h-14 rounded-lg bg-amber flex items-center justify-center shrink-0">
+          <img src={logo} alt="PaperSloth" className="w-14 h-14 rounded-lg object-contain" />
         </div>
         {!collapsed && (
           <span className="font-display text-[1.1rem] text-text leading-none">
@@ -1345,7 +1345,7 @@ function _BrowsePageUnused() {
       {/* ── Header ── */}
       <div className="bg-surface border-b border-border px-5 pt-4 pb-3 shrink-0">
         <div className="flex items-center gap-2 mb-3">
-          <BookOpen size={14} className="text-amber" />
+          <img src={logo} alt="PaperSloth" className="w-14 h-14 rounded-lg object-contain" />
           <span className="font-medium text-sm text-text">Browse Papers</span>
           {!loading && (
             <span className="text-[11px] text-muted font-mono">

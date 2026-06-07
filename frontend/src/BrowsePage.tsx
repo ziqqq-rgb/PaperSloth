@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { BookOpen, Download, Loader2, Search, X, Lock } from 'lucide-react'
 import { searchApi, type SearchFilters } from './search'
+import logo from './assets/logo.svg'
+
 
 interface Paper {
   course_code: string
@@ -103,7 +105,7 @@ export default function BrowsePage() {
       {/* ── Header ── */}
       <div className="bg-surface border-b border-border px-6 py-4 shrink-0">
         <div className="flex items-center gap-3 mb-4">
-          <BookOpen size={15} className="text-amber" />
+          <img src={logo} alt="PaperSloth" className="w-7 h-7 rounded-lg object-contain" />
           <span className="font-medium text-sm text-text">Past Year Papers</span>
           {!loading && (
             <span className="text-[11px] font-mono text-muted bg-border/40 px-2 py-0.5 rounded-full">
@@ -181,7 +183,7 @@ export default function BrowsePage() {
           </div>
         ) : visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-2">
-            <BookOpen size={28} className="text-border" />
+            <img src={logo} alt="PaperSloth" className="w-14 h-14 rounded-lg object-contain" />
             <p className="text-muted text-sm">No papers match your filters</p>
             {hasFilters && (
               <button onClick={() => { setFilters({}); setQuery('') }} className="text-[11px] text-amber hover:underline mt-1">
