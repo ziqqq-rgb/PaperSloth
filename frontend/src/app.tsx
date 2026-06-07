@@ -536,11 +536,11 @@ function SourceCard({ source, index }: { source: Source; index: number }) {
       {expanded && (
         <div className="mt-3 pt-3 border-t border-border/60 animate-fade-in">
           {source.full_text ? (
-            <p className="text-[12px] text-muted leading-relaxed font-mono whitespace-pre-wrap">
+            <p className="text-[14px] text-muted leading-relaxed font-mono whitespace-pre-wrap">
               {source.full_text}
             </p>
           ) : (
-            <p className="text-[12px] text-muted/50 italic">
+            <p className="text-[14px] text-muted/50 italic">
               Full text not available
             </p>
           )}
@@ -572,7 +572,7 @@ function MessageBubble({ message }: { message: Message }) {
       <div className={cx('flex-1 max-w-[85%]', isUser && 'flex flex-col items-end')}>
         <div
           className={cx(
-            'rounded-xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap',
+            'rounded-xl px-4 py-3 text-base leading-relaxed whitespace-pre-wrap',
             isUser
               ? 'bg-amber/8 border border-amber/20 text-text'
               : 'bg-surface border border-border text-text'
