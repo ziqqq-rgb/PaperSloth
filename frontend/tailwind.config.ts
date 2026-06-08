@@ -21,13 +21,19 @@ export default {
         'fade-in':  'fadeIn 0.3s ease forwards',
         'slide-up': 'slideUp 0.3s ease forwards',
         'blink':    'blink 1s step-end infinite',
+        // --- ADDED CUSTOM FLOAT ANIMATION ---
+        'float':    'float 6s ease-in-out infinite',
       },
       keyframes: {
         fadeIn:  { from: { opacity: '0' },              to: { opacity: '1' } },
         slideUp: { from: { opacity: '0', transform: 'translateY(8px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
         blink:   { '0%,100%': { opacity: '1' }, '50%': { opacity: '0' } },
+        // --- ADDED FLOAT KEYFRAMES ---
+        float: { 
+          '0%, 100%': { transform: 'translateY(0)' }, 
+          '50%': { transform: 'translateY(-20px)' } 
+        },
       },
-      // ── Typography plugin customisation ──────────────────────────────────
       typography: {
         DEFAULT: {
           css: {
@@ -73,15 +79,6 @@ export default {
             strong: { color: '#e6edf3', fontWeight: '600' },
             a:      { color: '#f59e0b', textDecoration: 'none' },
             hr:     { borderColor: '#21262d' },
-            keyframes: {
-              float: {
-                '0%, 100%': { transform: 'translateY(0)' },
-                '50%': { transform: 'translateY(-20px)' },
-              }
-            },
-            animation: {
-              'float': 'float 6s ease-in-out infinite',
-            },
           },
         },
       },

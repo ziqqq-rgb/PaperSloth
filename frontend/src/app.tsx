@@ -58,6 +58,8 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import logo from './assets/logo.svg'
 import logo3 from './assets/logo3.png'
+import PaperSlothMascot from './PaperSlothMascot';
+import mascotImg from './assets/mascot.png';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -122,8 +124,19 @@ function AuthPage() {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  
+  // NEW: State for tracking mouse for the Parallax Effect
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+  
   const { setAuth } = useAuthStore()
   const navigate = useNavigate()
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    // Calculates a slight inverted movement for the 3D depth effect
+    const x = (window.innerWidth / 2 - e.clientX) / 40
+    const y = (window.innerHeight / 2 - e.clientY) / 40
+    setMousePos({ x, y })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -146,175 +159,158 @@ function AuthPage() {
     }
   }
 
-  const features = [
-    {
-      icon: Search,
-      title: 'Semantic search',
-      desc: 'Find questions by topic, concept, or question type — not just keywords.',
-    },
-    {
-      icon: Sparkles,
-      title: 'AI-powered answers',
-      desc: 'Ask naturally and get cited responses from real past year papers.',
-    },
-    {
-      icon: BarChart3,
-      title: 'Trend analysis',
-      desc: 'See which topics appear most and how exam patterns shift over time.',
-    },
-    {
-      icon: Layers,
-      title: 'Practice generation',
-      desc: 'Build custom mock exams from any subject, year, or topic combination.',
-    },
-  ]
-
   return (
-    <div className="min-h-screen bg-base flex">
-      {/* ── Left branding panel ── */}
-      <div className="hidden lg:flex lg:w-[52%] bg-surface border-r border-border flex-col">
-        <div className="flex items-center gap-2 px-10 pt-10">
-            <img src={logo} alt="PaperSloth" className="w-14 h-14 object-contain" />
-          <span className="font-display text-xl text-text tracking-tight -ml-4">
-            PaperSloth
-          </span>
+    <div className="min-h-screen bg-base flex flex-col">
+      
+      {/* ── Full-width header ── */}
+      <header className="w-full flex items-center -ml-3 px-7 py-1 border-b border-border bg-surface z-30 shrink-0">
+        <img src={logo} alt="PaperSloth" className="w-14 h-14 object-contain" />
+        <span className="font-display text-xl text-text tracking-tight -ml-2">
+          PaperSloth
+        </span>
+      </header>
+
+      {/* ── Two panels below the header ── */}
+      <div className="flex flex-1">
+        
+        {/* Left branding panel */}
+        <div
+          className="hidden lg:flex lg:w-[52%] bg-surface border-r border-border flex-col relative overflow-hidden"
+          onMouseMove={handleMouseMove}
+        >
+          <div className="min-h-full bg-[#12161a] px-16 pt-12 pb-12 flex flex-col justify-start">
+            
+            {/* Typography */}
+            <div className="z-20 max-w-2xl mt-12">
+              <p className="font-mono text-xs text-amber/60 uppercase tracking-[0.45em] mb-2">
+                UTP Past Year Exam Assistant
+              </p>
+              <h1 className="font-display text-[3.5rem] tracking-tight font-semibold leading-[1.05] text-text">
+                Study smarter,
+                <br />
+                <span className="text-amber">not harder.</span>
+              </h1>
+            </div>
+
+            {/* Mascot & Glow */}
+            <div className="w-full flex justify-center items-center relative mt-8">
+              <div className="absolute w-[30rem] h-[30rem] bg-amber/10 blur-[130px] rounded-full pointer-events-none -top-10" />
+              <img
+                src={mascotImg}
+                alt="PaperSloth"
+                className="relative z-10 w-[38rem] max-w-full animate-float transition-transform duration-200 ease-out drop-shadow-[0_25px_60px_rgba(0,0,0,0.45)] object-contain"
+                style={{ transform: `translate(${mousePos.x}px, ${mousePos.y}px)` }}
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center gap-2 text-muted/40 z-20 mt-auto">
+              <div className="w-1.5 h-1.5 rounded-full bg-amber/40" />
+              <span className="text-xs font-mono">
+                Powered by Gemini + Pinecone RAG
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="flex-1 flex flex-col justify-center px-12">
-          <p className="font-mono text-xs text-amber/70 uppercase tracking-[0.2em] mb-4">
-            UTP Past Year Exam Assistant
-          </p>
-          <h1 className="font-display text-[2.8rem] leading-[1.1] text-text mb-6">
-            Study smarter,
-            <br />
-            <em className="text-amber not-italic">not harder.</em>
-          </h1>
-          <p className="text-muted text-base leading-relaxed max-w-sm mb-12">
-            Every UTP past year paper, semantically indexed and instantly
-            searchable. Just ask.
-          </p>
+        {/* Right form panel */}
+        <div className="flex-1 flex items-center justify-center p-8 bg-base">
+          <div className="w-full max-w-[360px]">
+            {/* Mobile logo (only shown when left panel is hidden) */}
+            <div className="lg:hidden flex items-center gap-2 mb-10">
+              <img src={logo} alt="PaperSloth" className="w-10 h-10 rounded-lg object-contain" />
+              <span className="font-display text-xl text-text">PaperSloth</span>
+            </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {features.map(({ icon: Icon, title, desc }) => (
-              <div
-                key={title}
-                className="p-4 rounded-xl border border-border bg-base/40"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Icon size={14} className="text-amber" />
-                  <span className="text-xs font-medium text-text">{title}</span>
+            <h2 className="font-display text-[2rem] text-text mb-1.5 leading-tight">
+              {mode === 'login' ? 'Welcome back' : 'Get started'}
+            </h2>
+            <p className="text-muted text-sm mb-8">
+              {mode === 'login'
+                ? 'Sign in to access your papers'
+                : 'Create your free account'}
+            </p>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {mode === 'register' && (
+                <div>
+                  <label className="block text-[11px] font-mono text-muted/70 uppercase tracking-widest mb-1.5">
+                    Full name
+                  </label>
+                  <input
+                    className="input-base"
+                    placeholder="Ahmad Razif"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
                 </div>
-                <p className="text-xs text-muted leading-relaxed">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+              )}
 
-        <div className="px-12 pb-8 flex items-center gap-2 text-muted/40">
-          <div className="w-1.5 h-1.5 rounded-full bg-amber/40" />
-          <span className="text-xs font-mono">
-            Powered by Gemini + Pinecone RAG
-          </span>
-        </div>
-      </div>
-
-      {/* ── Right form panel ── */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-base">
-        <div className="w-full max-w-[360px]">
-          {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-2 mb-10">
-              <img src={logo} alt="PaperSloth" className="w-14 h-14 rounded-lg object-contain" />
-            <span className="font-display text-xl text-text">PaperSloth</span>
-          </div>
-
-          <h2 className="font-display text-[2rem] text-text mb-1.5 leading-tight">
-            {mode === 'login' ? 'Welcome back' : 'Get started'}
-          </h2>
-          <p className="text-muted text-sm mb-8">
-            {mode === 'login'
-              ? 'Sign in to access your papers'
-              : 'Create your free account'}
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'register' && (
               <div>
                 <label className="block text-[11px] font-mono text-muted/70 uppercase tracking-widest mb-1.5">
-                  Full name
+                  Email
                 </label>
                 <input
                   className="input-base"
-                  placeholder="Ahmad Razif"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  type="email"
+                  placeholder="you@utp.edu.my"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </div>
-            )}
 
-            <div>
-              <label className="block text-[11px] font-mono text-muted/70 uppercase tracking-widest mb-1.5">
-                Email
-              </label>
-              <input
-                className="input-base"
-                type="email"
-                placeholder="you@utp.edu.my"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-mono text-muted/70 uppercase tracking-widest mb-1.5">
-                Password
-              </label>
-              <input
-                className="input-base"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-
-            {error && (
-              <div className="flex items-center gap-2 text-red-400 text-xs bg-red-400/8 border border-red-400/20 rounded-lg px-3 py-2.5">
-                <AlertCircle size={13} className="shrink-0" />
-                <span>{error}</span>
+              <div>
+                <label className="block text-[11px] font-mono text-muted/70 uppercase tracking-widest mb-1.5">
+                  Password
+                </label>
+                <input
+                  className="input-base"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary w-full flex items-center justify-center gap-2 mt-1"
-            >
-              {loading ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <CheckCircle2 size={14} />
+              {error && (
+                <div className="flex items-center gap-2 text-red-400 text-xs bg-red-400/8 border border-red-400/20 rounded-lg px-3 py-2.5">
+                  <AlertCircle size={13} className="shrink-0" />
+                  <span>{error}</span>
+                </div>
               )}
-              {mode === 'login' ? 'Sign in' : 'Create account'}
-            </button>
-          </form>
 
-          <p className="text-center text-sm text-muted mt-6">
-            {mode === 'login'
-              ? "Don't have an account? "
-              : 'Already have an account? '}
-            <button
-              className="text-amber hover:text-amber/80 transition-colors"
-              onClick={() => {
-                setMode(mode === 'login' ? 'register' : 'login')
-                setError('')
-              }}
-            >
-              {mode === 'login' ? 'Sign up' : 'Sign in'}
-            </button>
-          </p>
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary w-full flex items-center justify-center gap-2 mt-1"
+              >
+                {loading ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <CheckCircle2 size={14} />
+                )}
+                {mode === 'login' ? 'Sign in' : 'Create account'}
+              </button>
+            </form>
+
+            <p className="text-center text-sm text-muted mt-6">
+              {mode === 'login'
+                ? "Don't have an account? "
+                : 'Already have an account? '}
+              <button
+                className="text-amber hover:text-amber/80 transition-colors"
+                onClick={() => {
+                  setMode(mode === 'login' ? 'register' : 'login')
+                  setError('')
+                }}
+              >
+                {mode === 'login' ? 'Sign up' : 'Sign in'}
+              </button>
+            </p>
+          </div>
         </div>
       </div>
     </div>
