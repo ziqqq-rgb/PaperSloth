@@ -105,7 +105,6 @@ export default function BrowsePage() {
       {/* ── Header ── */}
       <div className="bg-surface border-b border-border px-6 py-4 shrink-0">
         <div className="flex items-center gap-3 mb-4">
-          <img src={logo} alt="PaperSloth" className="w-7 h-7 rounded-lg object-contain" />
           <span className="font-medium text-sm text-text">Past Year Papers</span>
           {!loading && (
             <span className="text-[11px] font-mono text-muted bg-border/40 px-2 py-0.5 rounded-full">

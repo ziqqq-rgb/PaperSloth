@@ -13,8 +13,8 @@ export default {
         amber:   { DEFAULT: '#f59e0b', dim: '#92400e' },
       },
       fontFamily: {
-        display: ['"Instrument Serif"', 'Georgia', 'serif'],
-        sans:    ['"DM Sans"', 'system-ui', 'sans-serif'],
+        display: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],  
+        sans:    ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],  
         mono:    ['"IBM Plex Mono"', 'monospace'],
       },
       animation: {

@@ -57,6 +57,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import logo from './assets/logo.svg'
+import logo2 from './assets/logo2.svg'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -172,7 +173,7 @@ function AuthPage() {
     <div className="min-h-screen bg-base flex">
       {/* ── Left branding panel ── */}
       <div className="hidden lg:flex lg:w-[52%] bg-surface border-r border-border flex-col">
-        <div className="flex items-center gap-3 px-10 pt-10">
+        <div className="flex items-center gap-2 px-10 pt-10">
             <img src={logo} alt="PaperSloth" className="w-14 h-14 object-contain" />
           <span className="font-display text-xl text-text tracking-tight">
             PaperSloth
@@ -343,14 +344,14 @@ function Sidebar() {
       {/* Logo */}
       <div
         className={cx(
-          'flex items-center h-[52px] border-b border-border px-3.5 shrink-0',
-          collapsed ? 'justify-center' : 'gap-2.5'
+          'flex items-center h-[52px] border-b border-border px-2 shrink-0',
+          collapsed ? 'justify-center' : ''
         )}
       >
           <img src={logo} alt="PaperSloth" className="w-14 h-14 rounded-lg object-contain" />
         
         {!collapsed && (
-          <span className="font-display text-[1.1rem] text-text leading-none">
+          <span className="font-display text-[1.1rem] text-text leading-none -ml-2">
             PaperSloth
           </span>
         )}
@@ -968,9 +969,11 @@ function ChatPage() {
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center px-6">
-            <div className="w-16 h-16 rounded-2xl bg-amber/8 border border-amber/20 flex items-center justify-center mb-6">
-              <Sparkles size={26} className="text-amber" />
-            </div>
+            <img
+              src={logo2}
+              alt="PaperSloth"
+              className="w-28 h-28 object-contain opacity-100"
+            />
             <h2 className="font-display text-[2rem] text-text text-center">
               What do you want to study?
             </h2>
