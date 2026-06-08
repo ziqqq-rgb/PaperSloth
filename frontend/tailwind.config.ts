@@ -73,6 +73,15 @@ export default {
             strong: { color: '#e6edf3', fontWeight: '600' },
             a:      { color: '#f59e0b', textDecoration: 'none' },
             hr:     { borderColor: '#21262d' },
+            keyframes: {
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-20px)' },
+              }
+            },
+            animation: {
+              'float': 'float 6s ease-in-out infinite',
+            },
           },
         },
       },
