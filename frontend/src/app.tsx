@@ -57,7 +57,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import logo from './assets/logo.svg'
-import logo2 from './assets/logo2.svg'
+import logo3 from './assets/logo3.png'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -175,7 +175,7 @@ function AuthPage() {
       <div className="hidden lg:flex lg:w-[52%] bg-surface border-r border-border flex-col">
         <div className="flex items-center gap-2 px-10 pt-10">
             <img src={logo} alt="PaperSloth" className="w-14 h-14 object-contain" />
-          <span className="font-display text-xl text-text tracking-tight">
+          <span className="font-display text-xl text-text tracking-tight -ml-4">
             PaperSloth
           </span>
         </div>
@@ -970,11 +970,11 @@ function ChatPage() {
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center px-6">
             <img
-              src={logo2}
+              src={logo3}
               alt="PaperSloth"
-              className="w-28 h-28 object-contain opacity-100"
+              className="w-44 h-44 object-contain opacity-100"
             />
-            <h2 className="font-display text-[2rem] text-text text-center">
+            <h2 className="font-display text-[2rem] text-text text-center -mt-8">
               What do you want to study?
             </h2>
           </div>
