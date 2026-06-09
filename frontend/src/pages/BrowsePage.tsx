@@ -1,22 +1,20 @@
 import React, { useState, useEffect } from 'react'
-import { BookOpen, Download, Loader2, Search, X, Lock } from 'lucide-react'
-import { searchApi, type SearchFilters } from './search'
-import logo from './assets/logo.svg'
-
+import { Download, Loader2, Search, X, Lock } from 'lucide-react'
+import { searchApi, type SearchFilters } from '../api/search'
+import { cx, fmtSize } from '../utils/helpers'
+import logo from '../assets/logo.svg'
 
 interface Paper {
-  course_code: string
-  subject_name: string
-  semester: string
-  year: number
-  total_questions: number
-  total_marks: number
-  questions_with_images: number
-  has_pdf: boolean
-  file_size_kb: number
+  course_code:            string
+  subject_name:           string
+  semester:               string
+  year:                   number
+  total_questions:        number
+  total_marks:            number
+  questions_with_images:  number
+  has_pdf:                boolean
+  file_size_kb:           number
 }
-
-const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ')
 
 const cleanSem = (sem: string, year: number) =>
   sem
@@ -25,17 +23,27 @@ const cleanSem = (sem: string, year: number) =>
     .replace(/\s+/g, ' ')
     .trim()
 
-export default function BrowsePage() {
-  const [papers, setPapers]           = useState<Paper[]>([])
-  const [loading, setLoading]         = useState(false)
-  const [filters, setFilters]         = useState<SearchFilters>({})
-  const [query, setQuery]             = useState('')
-  const [subjects, setSubjects]       = useState<{ course_code: string; subject_name: string }[]>([])
-  const [downloading, setDownloading] = useState<string | null>(null)
-  const [dlError, setDlError]         = useState<string | null>(null)
+const YEARS = Array.from({ length: 9 }, (_, i) => 2025 - i)
+const SEMS  = ['January', 'May', 'August', 'September']
 
-  const YEARS = Array.from({ length: 9 }, (_, i) => 2025 - i)
-  const SEMS  = ['January', 'May', 'August', 'September']
+const accentColors = [
+  'text-amber border-amber/30 bg-amber/5',
+  'text-sky-400 border-sky-400/30 bg-sky-400/5',
+  'text-emerald-400 border-emerald-400/30 bg-emerald-400/5',
+  'text-violet-400 border-violet-400/30 bg-violet-400/5',
+  'text-rose-400 border-rose-400/30 bg-rose-400/5',
+]
+
+const semOrder: Record<string, number> = { January: 0, May: 1, August: 2, September: 3 }
+
+export default function BrowsePage() {
+  const [papers,      setPapers]      = useState<Paper[]>([])
+  const [loading,     setLoading]     = useState(false)
+  const [filters,     setFilters]     = useState<SearchFilters>({})
+  const [query,       setQuery]       = useState('')
+  const [subjects,    setSubjects]    = useState<{ course_code: string; subject_name: string }[]>([])
+  const [downloading, setDownloading] = useState<string | null>(null)
+  const [dlError,     setDlError]     = useState<string | null>(null)
 
   useEffect(() => {
     searchApi.subjects()
@@ -66,7 +74,9 @@ export default function BrowsePage() {
     return acc
   }, {})
 
-  const semOrder: Record<string, number> = { January: 0, May: 1, August: 2, September: 3 }
+  const subjectKeys = Object.keys(grouped).sort()
+  const accentFor   = (code: string) =>
+    accentColors[subjectKeys.indexOf(code) % accentColors.length]
 
   const handleDownload = async (p: Paper) => {
     const id = `${p.course_code}-${p.year}-${p.semester}`
@@ -87,21 +97,8 @@ export default function BrowsePage() {
 
   const hasFilters = query || Object.values(filters).some(Boolean)
 
-  // Assign a subtle accent color per subject code (cycles through a small palette)
-  const accentColors = [
-    'text-amber border-amber/30 bg-amber/5',
-    'text-sky-400 border-sky-400/30 bg-sky-400/5',
-    'text-emerald-400 border-emerald-400/30 bg-emerald-400/5',
-    'text-violet-400 border-violet-400/30 bg-violet-400/5',
-    'text-rose-400 border-rose-400/30 bg-rose-400/5',
-  ]
-  const subjectKeys = Object.keys(grouped).sort()
-  const accentFor = (code: string) =>
-    accentColors[subjectKeys.indexOf(code) % accentColors.length]
-
   return (
     <div className="h-full flex flex-col overflow-hidden bg-base">
-
       {/* ── Header ── */}
       <div className="bg-surface border-b border-border px-6 py-4 shrink-0">
         <div className="flex items-center gap-3 mb-4">
@@ -185,7 +182,10 @@ export default function BrowsePage() {
             <img src={logo} alt="PaperSloth" className="w-14 h-14 rounded-lg object-contain" />
             <p className="text-muted text-sm">No papers match your filters</p>
             {hasFilters && (
-              <button onClick={() => { setFilters({}); setQuery('') }} className="text-[11px] text-amber hover:underline mt-1">
+              <button
+                onClick={() => { setFilters({}); setQuery('') }}
+                className="text-[11px] text-amber hover:underline mt-1"
+              >
                 Clear filters
               </button>
             )}
@@ -203,7 +203,6 @@ export default function BrowsePage() {
 
                 return (
                   <div key={code}>
-                    {/* Subject header */}
                     <div className="flex items-center gap-3 mb-4">
                       <span className={cx('font-mono text-sm font-semibold px-2.5 py-1 rounded-lg border', accent)}>
                         {code}
@@ -216,7 +215,6 @@ export default function BrowsePage() {
                       </span>
                     </div>
 
-                    {/* 4-column card grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                       {sorted.map(p => {
                         const id   = `${p.course_code}-${p.year}-${p.semester}`
@@ -228,17 +226,13 @@ export default function BrowsePage() {
                             key={id}
                             className="flex flex-col bg-surface border border-border/60 rounded-2xl overflow-hidden hover:border-border transition-all duration-150 group"
                           >
-                            {/* Card body */}
                             <div className="flex-1 p-4">
                               <p className="font-mono text-2xl font-semibold text-text leading-none mb-2">
                                 {p.year}
                               </p>
-                              <p className="text-xs text-muted leading-snug">
-                                {sem}
-                              </p>
+                              <p className="text-xs text-muted leading-snug">{sem}</p>
                             </div>
 
-                            {/* Download footer */}
                             {p.has_pdf ? (
                               <button
                                 onClick={() => handleDownload(p)}
