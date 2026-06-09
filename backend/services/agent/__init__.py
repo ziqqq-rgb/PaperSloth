@@ -1,13 +1,3 @@
-"""
-services/agent/__init__.py
-──────────────────────────
-Public entry point for the LangGraph agent.
-
-Called by routers/search.py:
-    from services.agents import handle
-    yield from handle(query, body, svc, thread_id)
-"""
-
 import json
 from typing import Any, Generator
 

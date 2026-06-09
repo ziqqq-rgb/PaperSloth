@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from core.security import get_current_user
 from services.cache import cache_get, cache_set
+from services.agent import handle
 
 router = APIRouter()
 
@@ -142,8 +143,6 @@ def agent_search(
       5. { type: 'error',   message: '...' }              (only on failure)
       6. { type: 'tutor_start', ... }                     (tutor_mode only)
     """
-    from services.agents import handle  # late import avoids circular deps at startup
-
     svc       = request.app.state.retrieval
     # Scope memory to the authenticated user so histories never bleed across users
     thread_id = current_user["id"]
