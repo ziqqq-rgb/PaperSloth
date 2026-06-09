@@ -14,7 +14,15 @@
     "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@api/*":        ["./src/api/*"],
+      "@store/*":      ["./src/store/*"],
+      "@components/*": ["./src/components/*"],
+      "@pages/*":      ["./src/pages/*"],
+      "@utils/*":      ["./src/utils/*"],
+      "@types/*":      ["./src/types/*"]
+    }
   },
   "include": ["src"]
 }
