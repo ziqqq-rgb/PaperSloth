@@ -10,7 +10,6 @@ Exports:
 """
 
 import json
-import sqlite3
 import threading
 from typing import Annotated, Any
 
@@ -22,6 +21,10 @@ from typing_extensions import TypedDict
 
 from services.intent import classify_with_memory
 import services.agent.handlers as h
+
+import psycopg
+from langgraph.checkpoint.postgres import PostgresSaver
+from core.config import settings
 
 # ── 1. State ──────────────────────────────────────────────────────────────────
 
@@ -100,14 +103,12 @@ def build_workflow() -> StateGraph:
 # ── 6. Per-thread SQLite checkpointer ────────────────────────────────────────
 
 _local    = threading.local()
-_DB_PATH  = "papersloth_memory.sqlite"
 
-
-def get_saver() -> SqliteSaver:
-    """Return a per-thread SqliteSaver, creating it on first access."""
+def get_saver() -> PostgresSaver:
+    """Return a per-thread PostgresSaver, creating it on first access."""
     if not hasattr(_local, "saver"):
-        conn = sqlite3.connect(_DB_PATH, check_same_thread=False)
-        saver = SqliteSaver(conn)
-        saver.setup()
+        conn = psycopg.connect(settings.database_url, autocommit=True)
+        saver = PostgresSaver(conn)
+        saver.setup()   # creates langgraph checkpoint tables if absent
         _local.saver = saver
     return _local.saver
