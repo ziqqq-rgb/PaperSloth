@@ -18,6 +18,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { searchApi, streamSearch, type SearchFilters } from '../api/search'
+import { historyApi } from '../api/search'
 import { cx, uid } from '../utils/helpers'
 import FilterChip from '../components/ui/FilterChip'
 import MessageBubble from '../components/ui/MessageBubble'
@@ -59,6 +60,20 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  useEffect(() => {
+  historyApi.get().then(({ messages: history }) => {
+    if (!history.length) return
+    setMessages(
+      history.map(m => ({
+        id:        uid(),
+        role:      m.role as 'user' | 'assistant',
+        content:   m.content,
+        timestamp: new Date(m.created_at),
+      }))
+    )
+  }).catch(() => {})
+}, [])
+
   const send = useCallback(
     async (query: string = input) => {
       if (!query.trim() || isStreaming) return
@@ -71,6 +86,7 @@ export default function ChatPage() {
       const aiMsg:  Message = { id: aiMsgId, role: 'assistant', content: '', sources: [], isStreaming: true, timestamp: new Date() }
 
       setMessages(prev => [...prev, userMsg, aiMsg])
+      historyApi.save('user', query)
 
       try {
         for await (const event of streamSearch(query, filters)) {
@@ -84,10 +100,12 @@ export default function ChatPage() {
               prev.map(m => m.id === aiMsgId ? { ...m, content: m.content + event.token } : m)
             )
           } else if (event.type === 'done') {
-            setMessages(prev =>
-              prev.map(m => m.id === aiMsgId ? { ...m, isStreaming: false } : m)
-            )
-            setIsStreaming(false)
+              setMessages(prev => {
+                const final = prev.find(m => m.id === aiMsgId)
+                if (final?.content) historyApi.save('assistant', final.content)
+                return prev.map(m => m.id === aiMsgId ? { ...m, isStreaming: false } : m)
+              })
+              setIsStreaming(false)
           } else if (event.type === 'error') {
             setMessages(prev =>
               prev.map(m => m.id === aiMsgId ? { ...m, content: `Error: ${event.message}`, isStreaming: false } : m)
@@ -144,7 +162,10 @@ export default function ChatPage() {
         <div className="flex items-center gap-2 shrink-0">
           {messages.length > 0 && (
             <button
-              onClick={() => setMessages([])}
+              onClick={() => {
+                historyApi.clear()
+                setMessages([])
+              }}
               className="text-[11px] text-muted/60 hover:text-muted font-mono transition-colors px-2"
             >
               Clear

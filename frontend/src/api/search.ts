@@ -103,3 +103,14 @@ export async function* streamSearch(
     }
   }
 }
+
+export const historyApi = {
+  get: (limit = 50): Promise<{ messages: { role: string; content: string; created_at: string }[] }> =>
+    api.get('/api/history', { params: { limit } }).then(r => r.data),
+
+  save: (role: string, content: string, intent?: string) =>
+    api.post('/api/history', { role, content, intent }).catch(() => {}), // silent fail
+
+  clear: () =>
+    api.delete('/api/history'),
+}
