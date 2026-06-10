@@ -62,7 +62,9 @@ _TUTOR = re.compile(
     re.I,
 )
 _TREND = re.compile(
-    r'\b(trend|recurring|repeat|common|frequent|most asked|appear most)\b', re.I
+    r'\b(trend|recurring|repeat|common|frequent|most asked|appear most'
+    r'|rare|least common|uncommon|infrequent|only once|never repeat)\b',
+    re.I,
 )
 _TOPIC = re.compile(
     r'\b(topic|what questions|list questions|all questions)\b', re.I
@@ -154,7 +156,9 @@ _MEMORY_PROMPT = ChatPromptTemplate.from_messages([
         "previous messages where they were stated.\n"
         "2. question_number is ONLY the digit (e.g. '2' not '2a'). Sub-part letters (a/b/c) go in sub_part.\n"
         "3. Prefer tutor_mode when the user wants step-by-step help with a specific question.\n"
-        "4. Use rag_search as the default when nothing else fits.\n"
+        "4. Use trend_analysis for any question about which topics are common, frequent, recurring, "
+        "rare, uncommon, or infrequent across past papers.\n"
+        "5. Use rag_search as the default when nothing else fits.\n"
         "Return structured JSON only.",
     ),
     MessagesPlaceholder(variable_name="messages"),

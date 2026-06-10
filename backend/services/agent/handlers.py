@@ -288,7 +288,7 @@ def tutor_mode(intent: Intent, body: Any, svc: Any) -> Generator[str, None, None
         temperature=0.1,
     )
     sys_msg = SystemMessage(content=(
-        "You are a patient, knowledgeable university engineering tutor for UTP students. "
+        "You are a patient, knowledgeable university past exam paper tutor for UTP students. "
         "When solving exam questions: "
         "(1) Break down each part clearly with its label. "
         "(2) Show all working steps. "
@@ -317,6 +317,11 @@ def tutor_mode(intent: Intent, body: Any, svc: Any) -> Generator[str, None, None
 
 # ── trend_analysis ────────────────────────────────────────────────────────────
 
+_RARE_PATTERN = re.compile(
+    r'\b(rare|least|uncommon|infrequent|only once|never repeat|least common)\b', re.I
+)
+
+
 def trend_analysis(intent: Intent, body: Any, svc: Any) -> Generator[str, None, None]:
     slots  = intent.slots
     course = body.course_code or slots.get("course_code") or extract_course(body.query)
@@ -326,36 +331,99 @@ def trend_analysis(intent: Intent, body: Any, svc: Any) -> Generator[str, None, 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
-    rows = execute_query(
-        """
-        SELECT question_number,
-               COUNT(DISTINCT year)                              AS year_count,
-               array_agg(DISTINCT year ORDER BY year DESC)      AS years
-        FROM   parent_chunks
-        WHERE  course_code = %s
-        GROUP  BY question_number
-        HAVING COUNT(DISTINCT year) > 1
-        ORDER  BY year_count DESC, question_number::int
-        LIMIT  10
-        """,
-        (course,),
-    )
+    is_rare = bool(_RARE_PATTERN.search(body.query))
+
+    if is_rare:
+        # Questions that appeared in exactly one year — the "long shots"
+        rows = execute_query(
+            """
+            SELECT question_number,
+                   COUNT(DISTINCT year)                                         AS year_count,
+                   array_agg(DISTINCT year ORDER BY year DESC)                 AS years,
+                   array_agg(DISTINCT semester)                                AS semesters,
+                   (array_agg(full_text ORDER BY year DESC, semester DESC))[1] AS sample_text
+            FROM   parent_chunks
+            WHERE  course_code = %s
+            GROUP  BY question_number
+            HAVING COUNT(DISTINCT year) = 1
+            ORDER  BY question_number::int
+            LIMIT  12
+            """,
+            (course,),
+        )
+    else:
+        # Questions that recurred across multiple years — the "safe bets"
+        rows = execute_query(
+            """
+            SELECT question_number,
+                   COUNT(DISTINCT year)                                         AS year_count,
+                   array_agg(DISTINCT year ORDER BY year DESC)                 AS years,
+                   array_agg(DISTINCT semester)                                AS semesters,
+                   (array_agg(full_text ORDER BY year DESC, semester DESC))[1] AS sample_text
+            FROM   parent_chunks
+            WHERE  course_code = %s
+            GROUP  BY question_number
+            HAVING COUNT(DISTINCT year) > 1
+            ORDER  BY year_count DESC, question_number::int
+            LIMIT  12
+            """,
+            (course,),
+        )
 
     if not rows:
-        yield f"data: {json.dumps({'type': 'token', 'token': f'No recurring topics found for {course}.'})}\n\n"
+        label = "rare or one-off" if is_rare else "recurring"
+        yield f"data: {json.dumps({'type': 'token', 'token': f'No {label} topics found for {course}.'})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
-    lines = [f"### {course} — recurring topics\n\n"]
+    # Build a structured context block for the LLM — keep preview short
+    topic_lines = []
     for r in rows:
-        qnum, ycount, years = r
-        lines.append(
-            f"**Q{qnum}** appeared in **{ycount}** different years: "
-            f"{', '.join(str(y) for y in years)}\n"
+        qnum, ycount, years, semesters, sample = r
+        preview       = (sample or "")[:220].replace("\n", " ").strip()
+        years_str     = ", ".join(str(y) for y in (years     or []))
+        semesters_str = ", ".join(str(s) for s in (semesters or []))
+        topic_lines.append(
+            f"Q{qnum} | appeared {ycount}x | years: {years_str} | "
+            f"semesters: {semesters_str} | content: {preview}"
         )
 
-    text  = "".join(lines)
-    CHUNK = 60
-    for i in range(0, len(text), CHUNK):
-        yield f"data: {json.dumps({'type': 'token', 'token': text[i:i+CHUNK]})}\n\n"
+    context    = "\n".join(topic_lines)
+    direction  = "rarely examined (appeared only once)" if is_rare else "most frequently recurring"
+    list_label = "rare or one-off" if is_rare else "also common"
+
+    prompt = f"""You are summarising {direction} exam topics for the subject {course}.
+
+Below is structured data — each line is one question with its recurrence info and a content preview:
+
+{context}
+
+Write a student-facing response in this exact structure:
+1. 2–3 sentences about the top 1–2 most notable questions. Describe what each topic is actually about (infer from the content preview), mention how many times it appeared and in which years and semesters. Do not just say "Q1" — describe the subject matter.
+2. On a new line write exactly: "These topics are {list_label}:"
+3. A numbered list of the remaining questions. For each: one short phrase describing what it covers, then in parentheses state the years and semesters it appeared in.
+
+Be concise. Refer to question numbers only as secondary references in parentheses."""
+
+    llm = ChatGoogleGenerativeAI(
+        model=settings.gemini_flash_model,
+        google_api_key=settings.gemini_api_key,
+        temperature=0.2,
+    )
+
+    full_response = ""
+    for chunk in llm.stream([HumanMessage(content=prompt)]):
+        content = chunk.content
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict):
+                    full_response += block.get("text", "")
+                elif isinstance(block, str):
+                    full_response += block
+        elif isinstance(content, str) and content:
+            full_response += content
+
+    CHUNK = 40
+    for i in range(0, len(full_response), CHUNK):
+        yield f"data: {json.dumps({'type': 'token', 'token': full_response[i:i+CHUNK]})}\n\n"
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
