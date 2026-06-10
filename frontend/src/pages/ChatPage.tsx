@@ -130,8 +130,11 @@ useEffect(() => {
     }
   }
 
-  const removeFilter = (key: keyof SearchFilters) =>
-    setFilters(prev => { const n = { ...prev }; delete n[key]; return n })
+  const removeFilter = (key: keyof SearchFilters) => {
+    const next = { ...filters }
+    delete next[key]
+    setFilters(next)
+  }
 
   const activeFilters = Object.entries(filters).filter(([, v]) => v !== undefined && v !== null && v !== '')
 
@@ -193,7 +196,7 @@ useEffect(() => {
             <select
               className="input-base text-xs py-1.5 w-36"
               value={filters.course_code ?? ''}
-              onChange={e => setFilters(p => ({ ...p, course_code: e.target.value || undefined }))}
+              onChange={e => setFilters({ ...filters, course_code: e.target.value || undefined })}
             >
               <option value="">All subjects</option>
               {subjects.map(s => <option key={s} value={s}>{s}</option>)}
@@ -205,7 +208,7 @@ useEffect(() => {
             <select
               className="input-base text-xs py-1.5 w-28"
               value={filters.year ?? ''}
-              onChange={e => setFilters(p => ({ ...p, year: e.target.value ? +e.target.value : undefined }))}
+              onChange={e => setFilters({ ...filters, year: e.target.value ? +e.target.value : undefined })}
             >
               <option value="">All years</option>
               {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
@@ -217,7 +220,7 @@ useEffect(() => {
             <select
               className="input-base text-xs py-1.5 w-36"
               value={filters.semester ?? ''}
-              onChange={e => setFilters(p => ({ ...p, semester: e.target.value || undefined }))}
+              onChange={e => setFilters({ ...filters, semester: e.target.value || undefined })}
             >
               <option value="">All semesters</option>
               {SEMESTERS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -231,7 +234,7 @@ useEffect(() => {
               placeholder="e.g. 10"
               className="input-base text-xs py-1.5 w-24"
               value={filters.min_marks ?? ''}
-              onChange={e => setFilters(p => ({ ...p, min_marks: e.target.value ? +e.target.value : undefined }))}
+              onChange={e => setFilters({ ...filters, min_marks: e.target.value ? +e.target.value : undefined })}
             />
           </div>
 
@@ -240,7 +243,7 @@ useEffect(() => {
             <select
               className="input-base text-xs py-1.5 w-32"
               value={filters.question_type ?? ''}
-              onChange={e => setFilters(p => ({ ...p, question_type: e.target.value || undefined }))}
+              onChange={e => setFilters({ ...filters, question_type: e.target.value || undefined })}
             >
               <option value="">All types</option>
               <option value="calculation">Calculation</option>
