@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { searchApi, streamSearch, type SearchFilters } from '../api/search'
 import { historyApi } from '../api/search'
+import { useChatStore } from '../store/chatStore'
 import { cx, uid } from '../utils/helpers'
 import FilterChip from '../components/ui/FilterChip'
 import MessageBubble from '../components/ui/MessageBubble'
@@ -36,18 +37,23 @@ const SUGGESTIONS = [
 
 const YEARS     = Array.from({ length: 9 }, (_, i) => 2025 - i)
 const SEMESTERS = ['January', 'May', 'August', 'September']
+ 
 
 export default function ChatPage() {
-  const [messages,    setMessages]    = useState<Message[]>([])
   const [input,       setInput]       = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
-  const [filters,     setFilters]     = useState<SearchFilters>({})
-  const [showFilters, setShowFilters] = useState(false)
   const [subjects,    setSubjects]    = useState<string[]>([])
+  const { 
+    messages, addMessage, updateMessage, clearMessages,
+    historyLoaded, markLoaded, setMessages,
+    filters, setFilters, showFilters, setShowFilters,  
+  } = useChatStore()
+
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLTextAreaElement>(null)
   const abortRef  = useRef(false)
+  const contentRef = useRef('')
 
   useEffect(() => {
     searchApi
@@ -60,19 +66,20 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  useEffect(() => {
+useEffect(() => {
+  if (historyLoaded) return   // ← already loaded, skip on re-navigation
   historyApi.get().then(({ messages: history }) => {
-    if (!history.length) return
-    setMessages(
-      history.map(m => ({
+    if (history.length) {
+      setMessages(history.map(m => ({
         id:        uid(),
         role:      m.role as 'user' | 'assistant',
         content:   m.content,
         timestamp: new Date(m.created_at),
-      }))
-    )
-  }).catch(() => {})
-}, [])
+      })))
+    }
+    markLoaded()
+  }).catch(() => { markLoaded() })
+}, [historyLoaded])
 
   const send = useCallback(
     async (query: string = input) => {
@@ -81,46 +88,35 @@ export default function ChatPage() {
       setIsStreaming(true)
       abortRef.current = false
 
-      const userMsg: Message = { id: uid(), role: 'user',      content: query, timestamp: new Date() }
+      const userMsg: Message = { id: uid(), role: 'user', content: query, timestamp: new Date() }
       const aiMsgId = uid()
-      const aiMsg:  Message = { id: aiMsgId, role: 'assistant', content: '', sources: [], isStreaming: true, timestamp: new Date() }
+      const aiMsg: Message = { id: aiMsgId, role: 'assistant', content: '', sources: [], isStreaming: true, timestamp: new Date() }
 
-      setMessages(prev => [...prev, userMsg, aiMsg])
+      addMessage(userMsg)
+      addMessage(aiMsg)
       historyApi.save('user', query)
 
       try {
         for await (const event of streamSearch(query, filters)) {
           if (abortRef.current) break
+
           if (event.type === 'sources') {
-            setMessages(prev =>
-              prev.map(m => m.id === aiMsgId ? { ...m, sources: event.sources } : m)
-            )
+            updateMessage(aiMsgId, { sources: event.sources })
           } else if (event.type === 'token') {
-            setMessages(prev =>
-              prev.map(m => m.id === aiMsgId ? { ...m, content: m.content + event.token } : m)
-            )
+            contentRef.current += event.token
+            updateMessage(aiMsgId, { content: contentRef.current })
           } else if (event.type === 'done') {
-              setMessages(prev => {
-                const final = prev.find(m => m.id === aiMsgId)
-                if (final?.content) historyApi.save('assistant', final.content)
-                return prev.map(m => m.id === aiMsgId ? { ...m, isStreaming: false } : m)
-              })
-              setIsStreaming(false)
+            historyApi.save('assistant', contentRef.current)
+            contentRef.current = ''
+            updateMessage(aiMsgId, { isStreaming: false })
+            setIsStreaming(false)
           } else if (event.type === 'error') {
-            setMessages(prev =>
-              prev.map(m => m.id === aiMsgId ? { ...m, content: `Error: ${event.message}`, isStreaming: false } : m)
-            )
+            updateMessage(aiMsgId, { content: `Error: ${event.message}`, isStreaming: false })
             setIsStreaming(false)
           }
         }
       } catch {
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === aiMsgId
-              ? { ...m, content: 'Search failed. Check your connection and try again.', isStreaming: false }
-              : m
-          )
-        )
+        updateMessage(aiMsgId, { content: 'Search failed. Check your connection and try again.', isStreaming: false })
         setIsStreaming(false)
       }
     },
@@ -164,7 +160,7 @@ export default function ChatPage() {
             <button
               onClick={() => {
                 historyApi.clear()
-                setMessages([])
+                clearMessages()  
               }}
               className="text-[11px] text-muted/60 hover:text-muted font-mono transition-colors px-2"
             >
