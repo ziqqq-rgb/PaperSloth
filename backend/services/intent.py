@@ -66,8 +66,18 @@ _TREND = re.compile(
     r'|rare|least common|uncommon|infrequent|only once|never repeat)\b',
     re.I,
 )
+# NOTE: _TOPIC matches requests to BROWSE/LIST all questions in a course/year —
+# no topic/subject filter implied. A query that names a specific subject or
+# concept (e.g. "questions related to X", "question about Y") is a rag_search,
+# even if it contains the word "question(s)". 
 _TOPIC = re.compile(
     r'\b(topic|what questions|list questions|all questions)\b', re.I
+)
+# If the query matches _TOPIC but ALSO contains a subject/topic-filter phrase
+# ("related to", "about", "on the topic of", "regarding", "concerning"), it's
+# actually a content search (rag_search), not a browse/list request.
+_TOPIC_SUBJECT_GUARD = re.compile(
+    r'\b(related to|about|on the topic of|regarding|concerning|on)\b', re.I
 )
 _GENERAL = re.compile(
     r'\b(what is|explain|define|how does|why does|what are)\b', re.I
@@ -78,14 +88,24 @@ _YEAR = re.compile(r'\b(20\d{2})\b')
 _SEM  = re.compile(r'\b(january|may|august|september)\b', re.I)
 
 
+def _is_topic_browse(text: str) -> bool:
+    """
+    True only if the query is a genuine browse/list request
+    (e.g. "what questions are in RBB3013 2025", "list all questions"),
+    and NOT a topic/subject-filtered content search
+    (e.g. "give me questions related to gradient descent").
+    """
+    return bool(_TOPIC.search(text)) and not _TOPIC_SUBJECT_GUARD.search(text)
+
+
 # ── 4. Regex slot extractor (shared) ─────────────────────────────────────────
 
 def _extract_slots(text: str) -> dict:
     slots: dict = {}
     if m := _QNUM.search(text):
-        slots["question_number"] = m.group(1)          # just the digit e.g. "2"
+        slots["question_number"] = m.group(1)          
         if m.group(2):
-            slots["sub_part"] = m.group(2).lower()     # e.g. "a"
+            slots["sub_part"] = m.group(2).lower()    
     if m := _YEAR.search(text):
         slots["year"] = int(m.group())
     if m := _SEM.search(text):
@@ -105,7 +125,7 @@ def _build_llm_classifier():
     return llm.with_structured_output(IntentResult)
 
 
-_classifier_cache: dict = {}   # module-level cache; safe for single-process uvicorn
+_classifier_cache: dict = {}   # module-level cache, safe for single-process uvicorn
 
 
 def _get_llm_classifier():
@@ -131,7 +151,7 @@ def classify(query: str) -> Intent:
         return Intent("fetch_paper", 0.9, slots)
     if _TREND.search(query):
         return Intent("trend_analysis", 0.85, slots)
-    if _TOPIC.search(query):
+    if _is_topic_browse(query):
         return Intent("topic_search", 0.85, slots)
 
     # LLM fallback for the single-turn case
@@ -158,7 +178,16 @@ _MEMORY_PROMPT = ChatPromptTemplate.from_messages([
         "3. Prefer tutor_mode when the user wants step-by-step help with a specific question.\n"
         "4. Use trend_analysis for any question about which topics are common, frequent, recurring, "
         "rare, uncommon, or infrequent across past papers.\n"
-        "5. Use rag_search as the default when nothing else fits.\n"
+        "5. topic_search is ONLY for browsing/listing ALL questions in a course and/or year with "
+        "NO subject-matter filter (e.g. 'what questions are in RBB3013 2025', 'list all questions "
+        "for this course'). It returns every question regardless of content.\n"
+        "6. If the user names a SPECIFIC SUBJECT, TOPIC, or CONCEPT — even phrased as 'question(s) "
+        "about X', 'question related to X', 'find questions on X' — this is rag_search, NOT "
+        "topic_search. rag_search performs a semantic content search and will correctly report "
+        "'no relevant questions found' if the topic isn't covered by any past paper. Never route a "
+        "topic-filtered request to topic_search, because topic_search ignores the topic filter "
+        "entirely and will dump unrelated questions.\n"
+        "7. Use rag_search as the default when nothing else fits.\n"
         "Return structured JSON only.",
     ),
     MessagesPlaceholder(variable_name="messages"),
@@ -181,7 +210,7 @@ def classify_with_memory(messages: List[AnyMessage]) -> Intent:
             return Intent("fetch_paper", 0.9, slots)
         if _TREND.search(latest_query):
             return Intent("trend_analysis", 0.85, slots)
-        if _TOPIC.search(latest_query):
+        if _is_topic_browse(latest_query):
             return Intent("topic_search", 0.85, slots)
 
     # Multi-turn: send full history to the LLM so it can inherit context
