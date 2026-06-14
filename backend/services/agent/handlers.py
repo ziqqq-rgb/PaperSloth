@@ -21,28 +21,20 @@ from services.intent import Intent
 from services.agent.helpers import extract_course, extract_sub_parts
 
 
-# ── general_knowledge ─────────────────────────────────────────────────────────
+# ── Shared LLM helper ─────────────────────────────────────────────────────────
 
-def general_knowledge(intent: Intent, body: Any, svc: Any) -> Generator[str, None, None]:
+def _stream_llm(
+    messages: list,
+    model: str = None,
+) -> str:
+    """Call LLM and return full response text."""
     llm = ChatGoogleGenerativeAI(
-        model=settings.gemini_flash_model,
+        model=model or settings.gemini_flash_model,
         google_api_key=settings.gemini_api_key,
         temperature=0.1,
     )
-    sys_msg = SystemMessage(
-        content=(
-            "You are a helpful university-level engineering tutor. "
-            "Answer the student's question clearly and concisely. "
-            "Use bullet points or numbered steps where appropriate. "
-            "If the question is about a specific exam paper or past year question, "
-            "say you need more context instead of guessing."
-        )
-    )
-
-    yield f"data: {json.dumps({'type': 'sources', 'sources': []})}\n\n"
-
     full_text = ""
-    for chunk in llm.stream([sys_msg, HumanMessage(content=body.query)]):
+    for chunk in llm.stream(messages):
         content = chunk.content
         if isinstance(content, list):
             for block in content:
@@ -52,12 +44,80 @@ def general_knowledge(intent: Intent, body: Any, svc: Any) -> Generator[str, Non
                     full_text += block
         elif isinstance(content, str) and content:
             full_text += content
+    return full_text
 
-    CHUNK = 40
-    for i in range(0, len(full_text), CHUNK):
-        yield f"data: {json.dumps({'type': 'token', 'token': full_text[i:i+CHUNK]})}\n\n"
 
+def _yield_text(text: str, chunk_size: int = 40) -> Generator[str, None, None]:
+    """Yield SSE token events for a text string."""
+    for i in range(0, len(text), chunk_size):
+        yield f"data: {json.dumps({'type': 'token', 'token': text[i:i+chunk_size]})}\n\n"
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
+# ── Inline question detector ──────────────────────────────────────────────────
+
+# Matches queries where the user pastes a question inline rather than
+# referencing a DB question by course/year/sem/qnum.
+# e.g. "help me answer q4a: Consider the matrix A = [[3,1,-1]..."
+#      "explain: A system has transfer function G(s) = ..."
+#      "solve this: Find the eigenvalues of ..."
+_INLINE_QUESTION = re.compile(
+    r'(?:consider|given|for|where|solve|find|determine|calculate|show|prove'
+    r'|:\s{0,5}[A-Z])'  # colon followed by capital letter (pasted question)
+    r'.{30,}',           # at least 30 chars of actual question content
+    re.I | re.DOTALL,
+)
+
+_INLINE_MARKERS = re.compile(
+    r':\s*(?:consider|given|find|determine|calculate|show|prove|let|suppose|if)\b',
+    re.I,
+)
+
+
+def _has_inline_question(query: str) -> bool:
+    """
+    True if the user pasted question text inline rather than referencing
+    a DB question by course/year/sem/qnum.
+    Heuristic: query contains a colon followed by a mathematical/problem statement.
+    """
+    # Strong signal: "help me with q4a: Consider the matrix..."
+    if _INLINE_MARKERS.search(query):
+        return True
+    # Weaker signal: long query with mathematical content
+    if len(query) > 120 and re.search(r'[=\[\]\(\)\+\-\*/^]', query):
+        return True
+    return False
+
+
+def _answer_inline(query: str) -> Generator[str, None, None]:
+    """Answer an inline question directly using the LLM."""
+    sys_msg = SystemMessage(content=(
+        "You are a patient, knowledgeable university tutor for UTP students. "
+        "The student has pasted an exam question directly — solve it step by step. "
+        "Show all working clearly. State relevant formulas before using them. "
+        "Label each part clearly if there are sub-parts. "
+        "Use markdown formatting."
+    ))
+    yield f"data: {json.dumps({'type': 'sources', 'sources': []})}\n\n"
+    full_response = _stream_llm([sys_msg, HumanMessage(content=query)])
+    yield from _yield_text(full_response)
+
+
+# ── general_knowledge ─────────────────────────────────────────────────────────
+
+def general_knowledge(intent: Intent, body: Any, svc: Any) -> Generator[str, None, None]:
+    sys_msg = SystemMessage(
+        content=(
+            "You are a helpful university-level engineering tutor. "
+            "Answer the student's question clearly and concisely. "
+            "Use bullet points or numbered steps where appropriate. "
+            "If the question is about a specific exam paper or past year question, "
+            "say you need more context instead of guessing."
+        )
+    )
+    yield f"data: {json.dumps({'type': 'sources', 'sources': []})}\n\n"
+    full_text = _stream_llm([sys_msg, HumanMessage(content=body.query)])
+    yield from _yield_text(full_text)
 
 
 # ── rag_search ────────────────────────────────────────────────────────────────
@@ -127,10 +187,7 @@ def fetch_paper(intent: Intent, body: Any, svc: Any) -> Generator[str, None, Non
     yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
 
     answer = f"**Q{qnum} — {course} {sem} {year}** ({r[3]} marks)\n\n{r[2]}"
-    CHUNK = 40
-    for i in range(0, len(answer), CHUNK):
-        yield f"data: {json.dumps({'type': 'token', 'token': answer[i:i+CHUNK]})}\n\n"
-    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    yield from _yield_text(answer)
 
 
 # ── topic_search ──────────────────────────────────────────────────────────────
@@ -181,16 +238,23 @@ def topic_search(intent: Intent, body: Any, svc: Any) -> Generator[str, None, No
             f"> {preview}…\n\n"
         )
 
-    text  = "\n".join(lines)
-    CHUNK = 60
-    for i in range(0, len(text), CHUNK):
-        yield f"data: {json.dumps({'type': 'token', 'token': text[i:i+CHUNK]})}\n\n"
-    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    text = "\n".join(lines)
+    yield from _yield_text(text, chunk_size=60)
 
 
 # ── tutor_mode ────────────────────────────────────────────────────────────────
 
 def tutor_mode(intent: Intent, body: Any, svc: Any) -> Generator[str, None, None]:
+    # ── Inline question fast-path ─────────────────────────────────────────────
+    # If the user pasted a question inline (e.g. "help me with q4a: Consider
+    # the matrix A = [[3,1,-1]..."), answer it directly without a DB lookup.
+    # This prevents the agent from fetching a completely different question
+    # from the DB based on stale context inherited from a previous turn.
+    if _has_inline_question(body.query):
+        yield from _answer_inline(body.query)
+        return
+
+    # ── DB lookup path ────────────────────────────────────────────────────────
     slots    = intent.slots
     course   = body.course_code or slots.get("course_code") or extract_course(body.query)
     year     = body.year        or slots.get("year")
@@ -276,17 +340,9 @@ def tutor_mode(intent: Intent, body: Any, svc: Any) -> Generator[str, None, None
                 )
             else:
                 greeting += f"Here's the question:\n\n> {full_text}\n\nShall I solve it?"
-            CHUNK = 40
-            for i in range(0, len(greeting), CHUNK):
-                yield f"data: {json.dumps({'type': 'token', 'token': greeting[i:i+CHUNK]})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            yield from _yield_text(greeting)
             return
 
-    llm = ChatGoogleGenerativeAI(
-        model=settings.gemini_flash_model,
-        google_api_key=settings.gemini_api_key,
-        temperature=0.1,
-    )
     sys_msg = SystemMessage(content=(
         "You are a patient, knowledgeable university past exam paper tutor for UTP students. "
         "When solving exam questions: "
@@ -297,22 +353,8 @@ def tutor_mode(intent: Intent, body: Any, svc: Any) -> Generator[str, None, None
         "Use markdown formatting."
     ))
 
-    full_response = ""
-    for chunk in llm.stream([sys_msg, HumanMessage(content=user_prompt)]):
-        content = chunk.content
-        if isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict):
-                    full_response += block.get("text", "")
-                elif isinstance(block, str):
-                    full_response += block
-        elif isinstance(content, str) and content:
-            full_response += content
-
-    CHUNK = 40
-    for i in range(0, len(full_response), CHUNK):
-        yield f"data: {json.dumps({'type': 'token', 'token': full_response[i:i+CHUNK]})}\n\n"
-    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    full_response = _stream_llm([sys_msg, HumanMessage(content=user_prompt)])
+    yield from _yield_text(full_response)
 
 
 # ── trend_analysis ────────────────────────────────────────────────────────────
@@ -334,7 +376,6 @@ def trend_analysis(intent: Intent, body: Any, svc: Any) -> Generator[str, None, 
     is_rare = bool(_RARE_PATTERN.search(body.query))
 
     if is_rare:
-        # Questions that appeared in exactly one year — the "long shots"
         rows = execute_query(
             """
             SELECT question_number,
@@ -352,7 +393,6 @@ def trend_analysis(intent: Intent, body: Any, svc: Any) -> Generator[str, None, 
             (course,),
         )
     else:
-        # Questions that recurred across multiple years — the "safe bets"
         rows = execute_query(
             """
             SELECT question_number,
@@ -376,7 +416,6 @@ def trend_analysis(intent: Intent, body: Any, svc: Any) -> Generator[str, None, 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
-    # Build a structured context block for the LLM — keep preview short
     topic_lines = []
     for r in rows:
         qnum, ycount, years, semesters, sample = r
@@ -405,25 +444,5 @@ Write a student-facing response in this exact structure:
 
 Be concise. Refer to question numbers only as secondary references in parentheses."""
 
-    llm = ChatGoogleGenerativeAI(
-        model=settings.gemini_flash_model,
-        google_api_key=settings.gemini_api_key,
-        temperature=0.2,
-    )
-
-    full_response = ""
-    for chunk in llm.stream([HumanMessage(content=prompt)]):
-        content = chunk.content
-        if isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict):
-                    full_response += block.get("text", "")
-                elif isinstance(block, str):
-                    full_response += block
-        elif isinstance(content, str) and content:
-            full_response += content
-
-    CHUNK = 40
-    for i in range(0, len(full_response), CHUNK):
-        yield f"data: {json.dumps({'type': 'token', 'token': full_response[i:i+CHUNK]})}\n\n"
-    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    full_response = _stream_llm([HumanMessage(content=prompt)])
+    yield from _yield_text(full_response)

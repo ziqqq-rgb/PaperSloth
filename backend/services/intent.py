@@ -188,7 +188,9 @@ _MEMORY_PROMPT = ChatPromptTemplate.from_messages([
         "topic-filtered request to topic_search, because topic_search ignores the topic filter "
         "entirely and will dump unrelated questions.\n"
         "7. Use rag_search as the default when nothing else fits.\n"
-        "Return structured JSON only.",
+        "Return structured JSON only."
+        "8. If the user's message contains an inline question (e.g. 'help me answer: Consider the matrix...'), "
+        "route to general_knowledge — the question text is self-contained and needs no DB lookup.\n"
     ),
     MessagesPlaceholder(variable_name="messages"),
 ])
